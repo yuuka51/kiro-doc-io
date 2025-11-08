@@ -1,0 +1,18 @@
+{
+  "mcpServers": {
+    "document-format": {
+      "command": "uvx",
+      "args": ["document-format-mcp-server"],
+      "env": {
+        "GOOGLE_APPLICATION_CREDENTIALS": "~/.config/kiro-mcp/google-credentials.json",
+        "MCP_OUTPUT_DIR": "~/Documents/kiro-output",
+        "MCP_LOG_LEVEL": "INFO",
+        "MCP_MAX_FILE_SIZE_MB": "100",
+        "MCP_API_TIMEOUT": "60",
+        "MCP_ENABLE_GOOGLE": "true"
+      },
+      "disabled": false,
+      "autoApprove": []
+    }
+  }
+}
