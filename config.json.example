@@ -1,0 +1,9 @@
+{
+  "google_credentials_path": "~/.config/kiro-mcp/google-credentials.json",
+  "output_directory": "~/Documents/kiro-output",
+  "max_file_size_mb": 100,
+  "max_sheets": 100,
+  "max_slides": 500,
+  "api_timeout_seconds": 60,
+  "enable_google_workspace": true
+}

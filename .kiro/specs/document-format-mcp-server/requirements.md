@@ -120,3 +120,17 @@
 3. THE MCP Server SHALL 標準入出力（stdio）を介してKiroと通信する
 4. THE MCP Server SHALL 起動時に30秒以内に初期化を完了する
 5. THE MCP Server SHALL 各ツール呼び出しに対して明確な成功または失敗の応答を返す
+
+### 要件10
+
+**ユーザーストーリー:** 開発者として、ローカル環境で実装した機能を簡単にテストしたい。そうすることで、MCPサーバとして統合する前に各コンポーネントの動作を確認できる。
+
+#### 受入基準
+
+1. THE Development Environment SHALL サンプルファイル生成スクリプトを提供する
+2. WHEN 開発者がサンプルファイル生成スクリプトを実行したとき、THE Script SHALL PowerPoint、Word、Excelのテストファイルを生成する
+3. THE Development Environment SHALL リーダー機能をテストするスクリプトを提供する
+4. WHEN 開発者がテストスクリプトを実行したとき、THE Script SHALL 各リーダークラスの動作を検証し、結果を表示する
+5. THE Development Environment SHALL uvおよびpipの両方でのセットアップをサポートする
+6. THE Development Environment SHALL クイックスタートガイドを提供し、5分以内にテスト環境をセットアップできるようにする
+7. THE Development Environment SHALL 詳細なセットアップガイドを提供し、トラブルシューティング情報を含める

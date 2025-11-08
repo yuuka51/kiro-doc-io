@@ -516,3 +516,269 @@ pip install document-format-mcp-server
 - メモリ使用量: 最大500MB
 - 処理時間: 1ファイルあたり最大5分
 - 同時処理数: 最大3ファイル
+
+## 開発・テスト環境
+
+### ローカル開発環境のセットアップ
+
+#### 環境構築ツール
+
+プロジェクトは以下のツールをサポート：
+
+- **uv** (推奨): 高速なPythonパッケージマネージャー
+- **pip**: 標準的なPythonパッケージマネージャー
+- **venv**: Python標準の仮想環境
+
+#### セットアップ手順
+
+```bash
+# uvを使用する場合（推奨）
+uv venv
+.venv\Scripts\activate  # Windows
+uv pip install -r requirements.txt
+
+# pipを使用する場合
+python -m venv .venv
+.venv\Scripts\activate  # Windows
+pip install -r requirements.txt
+```
+
+### テストツール
+
+#### 1. サンプルファイル生成スクリプト (`create_sample_files.py`)
+
+テスト用のサンプルファイルを自動生成するスクリプト。
+
+**機能:**
+- PowerPointファイル（3スライド、表を含む）の生成
+- Wordファイル（見出し、段落、箇条書き、表を含む）の生成
+- Excelファイル（3シート、データと数式を含む）の生成
+
+**使用方法:**
+```bash
+python create_sample_files.py
+```
+
+**出力:**
+- `test_files/sample.pptx`
+- `test_files/sample.docx`
+- `test_files/sample.xlsx`
+
+#### 2. リーダー機能テストスクリプト (`test_readers.py`)
+
+実装済みのリーダー機能を検証するスクリプト。
+
+**機能:**
+- ローカルファイル（PowerPoint、Word、Excel）の読み取りテスト
+- Google Workspaceファイル（スプレッドシート、ドキュメント、スライド）の読み取りテスト
+- 読み込んだ内容の表示と検証
+
+**使用方法:**
+```bash
+# ローカルファイルのテスト
+python test_readers.py
+
+# Google Workspaceファイルのテスト
+python test_readers.py --google
+```
+
+**テスト項目:**
+- ファイルの正常読み込み
+- データ構造の検証
+- エラーハンドリングの確認
+- 抽出されたコンテンツの表示
+
+### テストデータ構造
+
+#### PowerPointテストデータ
+
+```python
+{
+    "slides": [
+        {
+            "slide_number": 1,
+            "title": "サンプルプレゼンテーション",
+            "content": "Document Format MCP Server テスト用",
+            "notes": "",
+            "tables": []
+        },
+        {
+            "slide_number": 2,
+            "title": "機能紹介",
+            "content": "主な機能:\n  PowerPointファイルの読み取り\n  ...",
+            "notes": "",
+            "tables": []
+        },
+        {
+            "slide_number": 3,
+            "title": "データ表",
+            "content": "",
+            "notes": "",
+            "tables": [
+                {
+                    "rows": 4,
+                    "columns": 3,
+                    "data": [
+                        ["項目", "値", "備考"],
+                        ["読み取り", "対応", "完了"],
+                        ...
+                    ]
+                }
+            ]
+        }
+    ]
+}
+```
+
+#### Wordテストデータ
+
+```python
+{
+    "paragraphs": [
+        {
+            "text": "サンプルドキュメント",
+            "type": "heading",
+            "level": 0,
+            "style": "Title"
+        },
+        {
+            "text": "これはDocument Format MCP Serverのテスト用...",
+            "type": "paragraph",
+            "style": "Normal"
+        },
+        ...
+    ],
+    "tables": [
+        {
+            "rows": 4,
+            "columns": 3,
+            "data": [...]
+        }
+    ]
+}
+```
+
+#### Excelテストデータ
+
+```python
+{
+    "sheets": [
+        {
+            "name": "データ",
+            "data": [
+                ["ID", "名前", "カテゴリ", "値"],
+                [1, "PowerPoint", "読み取り", "完了"],
+                ...
+            ],
+            "row_count": 7,
+            "column_count": 4,
+            "formulas": {}
+        },
+        {
+            "name": "統計",
+            "data": [...],
+            "row_count": 4,
+            "column_count": 2,
+            "formulas": {}
+        },
+        {
+            "name": "計算",
+            "data": [...],
+            "row_count": 5,
+            "column_count": 3,
+            "formulas": {
+                "C4": "=B2+B3",
+                "C5": "=(B2+B3)/2"
+            }
+        }
+    ]
+}
+```
+
+### Google Workspace認証設定
+
+#### 認証情報の取得
+
+1. [Google Cloud Console](https://console.cloud.google.com/)でプロジェクトを作成
+2. 以下のAPIを有効化:
+   - Google Sheets API
+   - Google Docs API
+   - Google Slides API
+3. OAuth 2.0クライアントID（デスクトップアプリ）を作成
+4. 認証情報JSONファイルをダウンロード
+
+#### 認証情報の配置
+
+```bash
+# 推奨ディレクトリ構造
+.config/
+  └── google-credentials.json  # OAuth 2.0クライアント認証情報
+  └── token.json              # 自動生成される認証トークン
+```
+
+#### 認証フロー
+
+1. 初回実行時、ブラウザが開いてGoogle認証が求められる
+2. Googleアカウントでログインし、アクセス許可を承認
+3. 認証トークンが`token.json`に保存される
+4. 以降の実行では保存されたトークンを使用
+
+### ドキュメント
+
+#### クイックスタートガイド (`QUICKSTART.md`)
+
+5分で動作確認できる簡潔なガイド：
+- 環境セットアップ（2分）
+- サンプルファイル生成（1分）
+- テスト実行（2分）
+- Google Workspaceテスト（追加10分）
+
+#### セットアップガイド (`SETUP.md`)
+
+詳細なセットアップ手順：
+- uvまたはpipでの環境構築
+- テストファイルの準備方法
+- Google認証情報の取得と設定
+- トラブルシューティング
+- 次のステップへの案内
+
+### 開発ワークフロー
+
+#### 1. 環境セットアップ
+
+```bash
+uv venv
+.venv\Scripts\activate
+uv pip install -r requirements.txt
+```
+
+#### 2. サンプルファイル生成
+
+```bash
+python create_sample_files.py
+```
+
+#### 3. リーダー機能のテスト
+
+```bash
+python test_readers.py
+```
+
+#### 4. 実装の検証
+
+- 各リーダークラスが正しくファイルを読み込めることを確認
+- データ構造が設計通りであることを確認
+- エラーハンドリングが適切に動作することを確認
+
+#### 5. 次の実装へ
+
+- ライター機能の実装（タスク5-7）
+- MCPツール統合（タスク8）
+- パッケージング（タスク9-10）
+
+### CI/CD統合（将来）
+
+- GitHub Actionsでの自動テスト
+- Pytestによるユニットテスト
+- カバレッジレポート
+- 自動デプロイメント
