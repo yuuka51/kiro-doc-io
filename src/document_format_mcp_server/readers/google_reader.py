@@ -1,0 +1,561 @@
+"""Google Workspace file reader."""
+
+import os
+import re
+import time
+from typing import Any
+
+from google.auth.transport.requests import Request
+from google.oauth2.credentials import Credentials
+from google_auth_oauthlib.flow import InstalledAppFlow
+from googleapiclient.discovery import build
+from googleapiclient.errors import HttpError
+
+from ..utils.errors import (
+    AuthenticationError,
+    PermissionError,
+    APIError,
+    FileNotFoundError,
+    ConfigurationError,
+)
+from ..utils.logging_config import get_logger
+
+
+# ロガーの取得
+logger = get_logger(__name__)
+
+
+# Google APIのスコープ
+SCOPES = [
+    'https://www.googleapis.com/auth/spreadsheets.readonly',
+    'https://www.googleapis.com/auth/documents.readonly',
+    'https://www.googleapis.com/auth/presentations.readonly',
+]
+
+
+class GoogleWorkspaceReader:
+    """Google Workspaceファイルを読み取るクラス。"""
+
+    def __init__(self, credentials_path: str):
+        """
+        GoogleWorkspaceReaderを初期化する。
+
+        Args:
+            credentials_path: Google API認証情報ファイルのパス
+
+        Raises:
+            ConfigurationError: 認証情報ファイルが見つからない場合
+            AuthenticationError: 認証に失敗した場合
+        """
+        self.credentials_path = credentials_path
+        self.credentials = None
+        self._authenticate()
+
+    def _authenticate(self) -> None:
+        """
+        Google APIの認証を行う。
+
+        Raises:
+            ConfigurationError: 認証情報ファイルが見つからない場合
+            AuthenticationError: 認証に失敗した場合
+        """
+        logger.info("Google API認証を開始")
+        
+        # 認証情報ファイルの存在確認
+        if not os.path.exists(self.credentials_path):
+            logger.error(f"認証情報ファイルが見つかりません: {self.credentials_path}")
+            raise ConfigurationError(
+                f"Google API認証情報ファイルが見つかりません: {self.credentials_path}",
+                details={"credentials_path": self.credentials_path}
+            )
+
+        try:
+            creds = None
+            token_path = os.path.join(
+                os.path.dirname(self.credentials_path),
+                'token.json'
+            )
+
+            # トークンファイルが存在する場合は読み込む
+            if os.path.exists(token_path):
+                logger.debug("既存の認証トークンを読み込み")
+                creds = Credentials.from_authorized_user_file(token_path, SCOPES)
+
+            # 有効な認証情報がない場合は新規認証
+            if not creds or not creds.valid:
+                if creds and creds.expired and creds.refresh_token:
+                    try:
+                        logger.info("認証トークンをリフレッシュ")
+                        creds.refresh(Request())
+                    except Exception as e:
+                        logger.error("認証トークンのリフレッシュに失敗", exc_info=True)
+                        raise AuthenticationError(
+                            "Google API認証トークンのリフレッシュに失敗しました",
+                            details={"error": str(e)}
+                        )
+                else:
+                    try:
+                        logger.info("新規認証フローを開始")
+                        flow = InstalledAppFlow.from_client_secrets_file(
+                            self.credentials_path, SCOPES
+                        )
+                        creds = flow.run_local_server(port=0)
+                    except Exception as e:
+                        logger.error("Google API認証に失敗", exc_info=True)
+                        raise AuthenticationError(
+                            "Google API認証に失敗しました",
+                            details={"error": str(e)}
+                        )
+
+                # トークンを保存
+                try:
+                    with open(token_path, 'w') as token:
+                        token.write(creds.to_json())
+                    logger.debug("認証トークンを保存")
+                except Exception:
+                    # トークン保存失敗は警告のみ（認証自体は成功）
+                    logger.warning("認証トークンの保存に失敗しましたが、認証は成功しました")
+                    pass
+
+            self.credentials = creds
+            logger.info("Google API認証が完了")
+
+        except (ConfigurationError, AuthenticationError):
+            raise
+        except Exception as e:
+            logger.error("Google API認証処理中にエラーが発生", exc_info=True)
+            raise AuthenticationError(
+                "Google API認証処理中にエラーが発生しました",
+                details={"error": str(e)}
+            )
+
+    def _extract_file_id(self, file_id_or_url: str) -> str:
+        """
+        URLまたはファイルIDからファイルIDを抽出する。
+
+        Args:
+            file_id_or_url: GoogleファイルのURLまたはファイルID
+
+        Returns:
+            抽出されたファイルID
+
+        Examples:
+            >>> reader._extract_file_id("1abc123")
+            "1abc123"
+            >>> reader._extract_file_id("https://docs.google.com/spreadsheets/d/1abc123/edit")
+            "1abc123"
+        """
+        # URLの場合はファイルIDを抽出
+        patterns = [
+            r'/d/([a-zA-Z0-9-_]+)',  # /d/{file_id}
+            r'id=([a-zA-Z0-9-_]+)',  # id={file_id}
+        ]
+
+        for pattern in patterns:
+            match = re.search(pattern, file_id_or_url)
+            if match:
+                return match.group(1)
+
+        # パターンにマッチしない場合はそのまま返す（ファイルIDとして扱う）
+        return file_id_or_url
+
+    def read_spreadsheet(self, file_id_or_url: str) -> dict[str, Any]:
+        """
+        Googleスプレッドシートを読み取る。
+
+        Args:
+            file_id_or_url: スプレッドシートのURLまたはファイルID
+
+        Returns:
+            抽出されたコンテンツを含む辞書:
+            {
+                "title": str,
+                "sheets": [
+                    {
+                        "name": str,
+                        "data": [[cell_value, ...], ...],
+                        "row_count": int,
+                        "column_count": int
+                    }
+                ]
+            }
+
+        Raises:
+            FileNotFoundError: ファイルが見つからない場合
+            PermissionError: アクセス権限がない場合
+            APIError: API呼び出しに失敗した場合
+        """
+        file_id = self._extract_file_id(file_id_or_url)
+        logger.info(f"Googleスプレッドシートの読み込みを開始: {file_id}")
+        start_time = time.time()
+
+        try:
+            service = build('sheets', 'v4', credentials=self.credentials)
+
+            # スプレッドシートのメタデータを取得
+            spreadsheet = service.spreadsheets().get(
+                spreadsheetId=file_id
+            ).execute()
+
+            title = spreadsheet.get('properties', {}).get('title', '')
+            sheets_data = []
+
+            # 各シートのデータを取得
+            for sheet in spreadsheet.get('sheets', []):
+                sheet_properties = sheet.get('properties', {})
+                sheet_title = sheet_properties.get('title', '')
+
+                # シートのデータを取得
+                result = service.spreadsheets().values().get(
+                    spreadsheetId=file_id,
+                    range=sheet_title
+                ).execute()
+
+                values = result.get('values', [])
+
+                sheet_data = {
+                    "name": sheet_title,
+                    "data": values,
+                    "row_count": len(values),
+                    "column_count": max(len(row) for row in values) if values else 0
+                }
+                sheets_data.append(sheet_data)
+
+            result = {
+                "title": title,
+                "sheets": sheets_data
+            }
+            
+            # 処理時間を計算
+            elapsed_time = time.time() - start_time
+            logger.info(
+                f"Googleスプレッドシートの読み込みが完了: {file_id} "
+                f"(タイトル: {title}, シート数: {len(sheets_data)}, 処理時間: {elapsed_time:.2f}秒)"
+            )
+            logger.debug(f"抽出されたデータの概要: シート数={len(sheets_data)}")
+            
+            return result
+
+        except HttpError as e:
+            if e.resp.status == 404:
+                logger.error(f"Googleスプレッドシートが見つかりません: {file_id}")
+                raise FileNotFoundError(
+                    f"指定されたGoogleスプレッドシートが見つかりません: {file_id}",
+                    details={"file_id": file_id, "error": str(e)}
+                )
+            elif e.resp.status == 403:
+                logger.error(f"Googleスプレッドシートへのアクセス権限がありません: {file_id}")
+                raise PermissionError(
+                    f"Googleスプレッドシートへのアクセス権限がありません: {file_id}",
+                    details={"file_id": file_id, "error": str(e)}
+                )
+            else:
+                logger.error(
+                    f"Googleスプレッドシートの読み取り中にエラーが発生: {file_id}",
+                    exc_info=True
+                )
+                raise APIError(
+                    f"Googleスプレッドシートの読み取り中にエラーが発生しました: {file_id}",
+                    details={"file_id": file_id, "status": e.resp.status, "error": str(e)}
+                )
+        except Exception as e:
+            logger.error(
+                f"Googleスプレッドシートの読み取り中に予期しないエラーが発生: {file_id}",
+                exc_info=True
+            )
+            raise APIError(
+                f"Googleスプレッドシートの読み取り中に予期しないエラーが発生しました: {file_id}",
+                details={"file_id": file_id, "error": str(e)}
+            )
+
+    def read_document(self, file_id_or_url: str) -> dict[str, Any]:
+        """
+        Googleドキュメントを読み取る。
+
+        Args:
+            file_id_or_url: ドキュメントのURLまたはファイルID
+
+        Returns:
+            抽出されたコンテンツを含む辞書:
+            {
+                "title": str,
+                "content": [
+                    {
+                        "type": "paragraph" | "heading" | "table",
+                        "text": str,
+                        "style": str,
+                        "level": int  # 見出しの場合
+                    }
+                ]
+            }
+
+        Raises:
+            FileNotFoundError: ファイルが見つからない場合
+            PermissionError: アクセス権限がない場合
+            APIError: API呼び出しに失敗した場合
+        """
+        file_id = self._extract_file_id(file_id_or_url)
+        logger.info(f"Googleドキュメントの読み込みを開始: {file_id}")
+        start_time = time.time()
+
+        try:
+            service = build('docs', 'v1', credentials=self.credentials)
+
+            # ドキュメントを取得
+            document = service.documents().get(documentId=file_id).execute()
+
+            title = document.get('title', '')
+            content_data = []
+
+            # ドキュメントの内容を解析
+            for element in document.get('body', {}).get('content', []):
+                if 'paragraph' in element:
+                    paragraph = element['paragraph']
+                    paragraph_style = paragraph.get('paragraphStyle', {})
+                    named_style = paragraph_style.get('namedStyleType', 'NORMAL_TEXT')
+
+                    # テキストを抽出
+                    text_parts = []
+                    for text_element in paragraph.get('elements', []):
+                        if 'textRun' in text_element:
+                            text_parts.append(text_element['textRun'].get('content', ''))
+
+                    text = ''.join(text_parts).strip()
+
+                    if text:
+                        content_item = {
+                            "type": "heading" if "HEADING" in named_style else "paragraph",
+                            "text": text,
+                            "style": named_style
+                        }
+
+                        # 見出しレベルを抽出
+                        if "HEADING" in named_style:
+                            level_match = re.search(r'HEADING_(\d+)', named_style)
+                            if level_match:
+                                content_item["level"] = int(level_match.group(1))
+
+                        content_data.append(content_item)
+
+                elif 'table' in element:
+                    table = element['table']
+                    table_data = []
+
+                    for row in table.get('tableRows', []):
+                        row_data = []
+                        for cell in row.get('tableCells', []):
+                            cell_text = []
+                            for cell_element in cell.get('content', []):
+                                if 'paragraph' in cell_element:
+                                    for text_element in cell_element['paragraph'].get('elements', []):
+                                        if 'textRun' in text_element:
+                                            cell_text.append(text_element['textRun'].get('content', ''))
+                            row_data.append(''.join(cell_text).strip())
+                        table_data.append(row_data)
+
+                    content_data.append({
+                        "type": "table",
+                        "data": table_data,
+                        "rows": len(table_data),
+                        "columns": max(len(row) for row in table_data) if table_data else 0
+                    })
+
+            result = {
+                "title": title,
+                "content": content_data
+            }
+            
+            # 処理時間を計算
+            elapsed_time = time.time() - start_time
+            logger.info(
+                f"Googleドキュメントの読み込みが完了: {file_id} "
+                f"(タイトル: {title}, コンテンツ数: {len(content_data)}, 処理時間: {elapsed_time:.2f}秒)"
+            )
+            logger.debug(f"抽出されたデータの概要: コンテンツ数={len(content_data)}")
+            
+            return result
+
+        except HttpError as e:
+            if e.resp.status == 404:
+                logger.error(f"Googleドキュメントが見つかりません: {file_id}")
+                raise FileNotFoundError(
+                    f"指定されたGoogleドキュメントが見つかりません: {file_id}",
+                    details={"file_id": file_id, "error": str(e)}
+                )
+            elif e.resp.status == 403:
+                logger.error(f"Googleドキュメントへのアクセス権限がありません: {file_id}")
+                raise PermissionError(
+                    f"Googleドキュメントへのアクセス権限がありません: {file_id}",
+                    details={"file_id": file_id, "error": str(e)}
+                )
+            else:
+                logger.error(
+                    f"Googleドキュメントの読み取り中にエラーが発生: {file_id}",
+                    exc_info=True
+                )
+                raise APIError(
+                    f"Googleドキュメントの読み取り中にエラーが発生しました: {file_id}",
+                    details={"file_id": file_id, "status": e.resp.status, "error": str(e)}
+                )
+        except Exception as e:
+            logger.error(
+                f"Googleドキュメントの読み取り中に予期しないエラーが発生: {file_id}",
+                exc_info=True
+            )
+            raise APIError(
+                f"Googleドキュメントの読み取り中に予期しないエラーが発生しました: {file_id}",
+                details={"file_id": file_id, "error": str(e)}
+            )
+
+    def read_slides(self, file_id_or_url: str) -> dict[str, Any]:
+        """
+        Googleスライドを読み取る。
+
+        Args:
+            file_id_or_url: スライドのURLまたはファイルID
+
+        Returns:
+            抽出されたコンテンツを含む辞書:
+            {
+                "title": str,
+                "slides": [
+                    {
+                        "slide_number": int,
+                        "elements": [
+                            {
+                                "type": "text" | "table" | "image",
+                                "content": str | dict
+                            }
+                        ]
+                    }
+                ]
+            }
+
+        Raises:
+            FileNotFoundError: ファイルが見つからない場合
+            PermissionError: アクセス権限がない場合
+            APIError: API呼び出しに失敗した場合
+        """
+        file_id = self._extract_file_id(file_id_or_url)
+        logger.info(f"Googleスライドの読み込みを開始: {file_id}")
+        start_time = time.time()
+
+        try:
+            service = build('slides', 'v1', credentials=self.credentials)
+
+            # プレゼンテーションを取得
+            presentation = service.presentations().get(
+                presentationId=file_id
+            ).execute()
+
+            title = presentation.get('title', '')
+            slides_data = []
+
+            # 各スライドを処理
+            for idx, slide in enumerate(presentation.get('slides', []), start=1):
+                slide_elements = []
+
+                # スライド内の要素を処理
+                for page_element in slide.get('pageElements', []):
+                    if 'shape' in page_element:
+                        shape = page_element['shape']
+
+                        # テキストを抽出
+                        if 'text' in shape:
+                            text_parts = []
+                            for text_element in shape['text'].get('textElements', []):
+                                if 'textRun' in text_element:
+                                    text_parts.append(text_element['textRun'].get('content', ''))
+
+                            text = ''.join(text_parts).strip()
+                            if text:
+                                slide_elements.append({
+                                    "type": "text",
+                                    "content": text
+                                })
+
+                    elif 'table' in page_element:
+                        table = page_element['table']
+                        table_data = []
+
+                        for row in table.get('tableRows', []):
+                            row_data = []
+                            for cell in row.get('tableCells', []):
+                                cell_text = []
+                                if 'text' in cell:
+                                    for text_element in cell['text'].get('textElements', []):
+                                        if 'textRun' in text_element:
+                                            cell_text.append(text_element['textRun'].get('content', ''))
+                                row_data.append(''.join(cell_text).strip())
+                            table_data.append(row_data)
+
+                        slide_elements.append({
+                            "type": "table",
+                            "content": {
+                                "data": table_data,
+                                "rows": len(table_data),
+                                "columns": max(len(row) for row in table_data) if table_data else 0
+                            }
+                        })
+
+                    elif 'image' in page_element:
+                        image = page_element['image']
+                        slide_elements.append({
+                            "type": "image",
+                            "content": {
+                                "description": image.get('contentUrl', ''),
+                                "title": image.get('title', '')
+                            }
+                        })
+
+                slides_data.append({
+                    "slide_number": idx,
+                    "elements": slide_elements
+                })
+
+            result = {
+                "title": title,
+                "slides": slides_data
+            }
+            
+            # 処理時間を計算
+            elapsed_time = time.time() - start_time
+            logger.info(
+                f"Googleスライドの読み込みが完了: {file_id} "
+                f"(タイトル: {title}, スライド数: {len(slides_data)}, 処理時間: {elapsed_time:.2f}秒)"
+            )
+            logger.debug(f"抽出されたデータの概要: スライド数={len(slides_data)}")
+            
+            return result
+
+        except HttpError as e:
+            if e.resp.status == 404:
+                logger.error(f"Googleスライドが見つかりません: {file_id}")
+                raise FileNotFoundError(
+                    f"指定されたGoogleスライドが見つかりません: {file_id}",
+                    details={"file_id": file_id, "error": str(e)}
+                )
+            elif e.resp.status == 403:
+                logger.error(f"Googleスライドへのアクセス権限がありません: {file_id}")
+                raise PermissionError(
+                    f"Googleスライドへのアクセス権限がありません: {file_id}",
+                    details={"file_id": file_id, "error": str(e)}
+                )
+            else:
+                logger.error(
+                    f"Googleスライドの読み取り中にエラーが発生: {file_id}",
+                    exc_info=True
+                )
+                raise APIError(
+                    f"Googleスライドの読み取り中にエラーが発生しました: {file_id}",
+                    details={"file_id": file_id, "status": e.resp.status, "error": str(e)}
+                )
+        except Exception as e:
+            logger.error(
+                f"Googleスライドの読み取り中に予期しないエラーが発生: {file_id}",
+                exc_info=True
+            )
+            raise APIError(
+                f"Googleスライドの読み取り中に予期しないエラーが発生しました: {file_id}",
+                details={"file_id": file_id, "error": str(e)}
+            )
