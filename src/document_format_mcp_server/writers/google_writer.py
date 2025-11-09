@@ -153,6 +153,7 @@ class GoogleWorkspaceWriter:
             APIError: リトライ後も失敗した場合
         """
         import socket
+        import concurrent.futures
         from googleapiclient.errors import HttpError
         
         last_exception = None
@@ -160,10 +161,22 @@ class GoogleWorkspaceWriter:
         for attempt in range(self.max_retries):
             try:
                 # タイムアウト付きでAPI呼び出しを実行
-                result = request_func(*args, **kwargs)
-                
-                logger.debug(f"API呼び出しが成功（試行回数: {attempt + 1}）")
-                return result
+                with concurrent.futures.ThreadPoolExecutor(max_workers=1) as executor:
+                    future = executor.submit(request_func, *args, **kwargs)
+                    try:
+                        result = future.result(timeout=self.api_timeout)
+                        logger.debug(f"API呼び出しが成功（試行回数: {attempt + 1}）")
+                        return result
+                    except concurrent.futures.TimeoutError:
+                        logger.warning(
+                            f"API呼び出しがタイムアウトしました（{self.api_timeout}秒）。"
+                            f"リトライします（試行回数: {attempt + 1}/{self.max_retries}）"
+                        )
+                        last_exception = TimeoutError(f"API呼び出しが{self.api_timeout}秒でタイムアウトしました")
+                        if attempt < self.max_retries - 1:
+                            wait_time = (2 ** attempt)
+                            time.sleep(wait_time)
+                        continue
                 
             except HttpError as e:
                 last_exception = e

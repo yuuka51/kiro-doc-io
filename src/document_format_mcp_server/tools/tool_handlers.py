@@ -93,8 +93,15 @@ class ToolHandlers:
             
             # ReadResultを処理
             if read_result.success:
-                # 成功時はcontentを返す
-                return self._success_response(read_result.content.content)
+                # 成功時はReadResult全体を返す（format_type、metadata、contentを含む）
+                response_data = {
+                    "success": True,
+                    "format_type": read_result.content.format_type,
+                    "metadata": read_result.content.metadata,
+                    "content": read_result.content.content,
+                    "file_path": read_result.file_path
+                }
+                return self._success_response(response_data)
             else:
                 # 失敗時はエラーを返す
                 return self._error_response(
@@ -127,8 +134,15 @@ class ToolHandlers:
             
             # ReadResultを処理
             if read_result.success:
-                # 成功時はcontentを返す
-                return self._success_response(read_result.content.content)
+                # 成功時はReadResult全体を返す（format_type、metadata、contentを含む）
+                response_data = {
+                    "success": True,
+                    "format_type": read_result.content.format_type,
+                    "metadata": read_result.content.metadata,
+                    "content": read_result.content.content,
+                    "file_path": read_result.file_path
+                }
+                return self._success_response(response_data)
             else:
                 # 失敗時はエラーを返す
                 return self._error_response(
@@ -161,8 +175,15 @@ class ToolHandlers:
             
             # ReadResultを処理
             if read_result.success:
-                # 成功時はcontentを返す
-                return self._success_response(read_result.content.content)
+                # 成功時はReadResult全体を返す（format_type、metadata、contentを含む）
+                response_data = {
+                    "success": True,
+                    "format_type": read_result.content.format_type,
+                    "metadata": read_result.content.metadata,
+                    "content": read_result.content.content,
+                    "file_path": read_result.file_path
+                }
+                return self._success_response(response_data)
             else:
                 # 失敗時はエラーを返す
                 return self._error_response(
@@ -204,8 +225,15 @@ class ToolHandlers:
             
             # ReadResultを処理
             if read_result.success:
-                # 成功時はcontentを返す
-                return self._success_response(read_result.content.content)
+                # 成功時はReadResult全体を返す（format_type、metadata、contentを含む）
+                response_data = {
+                    "success": True,
+                    "format_type": read_result.content.format_type,
+                    "metadata": read_result.content.metadata,
+                    "content": read_result.content.content,
+                    "file_path": read_result.file_path
+                }
+                return self._success_response(response_data)
             else:
                 # 失敗時はエラーを返す
                 return self._error_response(
@@ -247,8 +275,15 @@ class ToolHandlers:
             
             # ReadResultを処理
             if read_result.success:
-                # 成功時はcontentを返す
-                return self._success_response(read_result.content.content)
+                # 成功時はReadResult全体を返す（format_type、metadata、contentを含む）
+                response_data = {
+                    "success": True,
+                    "format_type": read_result.content.format_type,
+                    "metadata": read_result.content.metadata,
+                    "content": read_result.content.content,
+                    "file_path": read_result.file_path
+                }
+                return self._success_response(response_data)
             else:
                 # 失敗時はエラーを返す
                 return self._error_response(
@@ -290,8 +325,15 @@ class ToolHandlers:
             
             # ReadResultを処理
             if read_result.success:
-                # 成功時はcontentを返す
-                return self._success_response(read_result.content.content)
+                # 成功時はReadResult全体を返す（format_type、metadata、contentを含む）
+                response_data = {
+                    "success": True,
+                    "format_type": read_result.content.format_type,
+                    "metadata": read_result.content.metadata,
+                    "content": read_result.content.content,
+                    "file_path": read_result.file_path
+                }
+                return self._success_response(response_data)
             else:
                 # 失敗時はエラーを返す
                 return self._error_response(
