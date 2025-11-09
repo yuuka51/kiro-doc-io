@@ -35,18 +35,27 @@ SCOPES = [
 class GoogleWorkspaceWriter:
     """Google Workspaceファイルを作成するクラス。"""
 
-    def __init__(self, credentials_path: str):
+    def __init__(
+        self,
+        credentials_path: str,
+        api_timeout_seconds: int = 60,
+        max_retries: int = 3
+    ):
         """
         GoogleWorkspaceWriterを初期化する。
 
         Args:
             credentials_path: Google API認証情報ファイルのパス
+            api_timeout_seconds: API呼び出しのタイムアウト（秒）
+            max_retries: 最大リトライ回数
 
         Raises:
             ConfigurationError: 認証情報ファイルが見つからない場合
             AuthenticationError: 認証に失敗した場合
         """
         self.credentials_path = credentials_path
+        self.api_timeout = api_timeout_seconds
+        self.max_retries = max_retries
         self.credentials = None
         self._authenticate()
 
@@ -128,6 +137,73 @@ class GoogleWorkspaceWriter:
                 details={"error": str(e)}
             )
 
+    def _execute_with_retry(self, request_func, *args, **kwargs):
+        """
+        Google API呼び出しをリトライロジック付きで実行する。
+
+        Args:
+            request_func: 実行するAPI呼び出し関数
+            *args: 関数の位置引数
+            **kwargs: 関数のキーワード引数
+
+        Returns:
+            API呼び出しの結果
+
+        Raises:
+            APIError: リトライ後も失敗した場合
+        """
+        import socket
+        from googleapiclient.errors import HttpError
+        
+        last_exception = None
+        
+        for attempt in range(self.max_retries):
+            try:
+                # タイムアウト付きでAPI呼び出しを実行
+                result = request_func(*args, **kwargs)
+                
+                logger.debug(f"API呼び出しが成功（試行回数: {attempt + 1}）")
+                return result
+                
+            except HttpError as e:
+                last_exception = e
+                
+                # リトライ可能なエラーかチェック
+                if e.resp.status in [429, 500, 502, 503, 504]:
+                    # レート制限またはサーバーエラー
+                    wait_time = (2 ** attempt)  # 指数バックオフ
+                    logger.warning(
+                        f"API呼び出しが失敗（ステータス: {e.resp.status}）。"
+                        f"{wait_time}秒後にリトライします（試行回数: {attempt + 1}/{self.max_retries}）"
+                    )
+                    time.sleep(wait_time)
+                else:
+                    # リトライ不可能なエラー（404, 403など）
+                    logger.error(f"リトライ不可能なエラー（ステータス: {e.resp.status}）")
+                    raise
+                    
+            except (socket.error, socket.timeout, TimeoutError) as e:
+                last_exception = e
+                
+                # ネットワークエラー
+                wait_time = (2 ** attempt)  # 指数バックオフ
+                logger.warning(
+                    f"ネットワークエラーが発生: {str(e)}。"
+                    f"{wait_time}秒後にリトライします（試行回数: {attempt + 1}/{self.max_retries}）"
+                )
+                time.sleep(wait_time)
+                
+            except Exception as e:
+                # その他の予期しないエラー
+                logger.error(f"予期しないエラーが発生: {str(e)}", exc_info=True)
+                raise
+        
+        # 最大リトライ回数に達した
+        logger.error(f"最大リトライ回数（{self.max_retries}）に達しました")
+        raise APIError(
+            f"API呼び出しが{self.max_retries}回失敗しました",
+            details={"last_error": str(last_exception)}
+        )
 
     def create_spreadsheet(self, data: dict[str, Any], title: str) -> str:
         """

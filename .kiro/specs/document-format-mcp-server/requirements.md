@@ -134,3 +134,19 @@
 5. THE Development Environment SHALL uvおよびpipの両方でのセットアップをサポートする
 6. THE Development Environment SHALL クイックスタートガイドを提供し、5分以内にテスト環境をセットアップできるようにする
 7. THE Development Environment SHALL 詳細なセットアップガイドを提供し、トラブルシューティング情報を含める
+
+### 要件11
+
+**ユーザーストーリー:** 開発者として、実装が設計仕様に準拠していることを確認したい。そうすることで、本番環境で正しく動作することを保証できる。
+
+#### 受入基準
+
+1. THE ExcelReader SHALL 設定可能なmax_sheets引数を受け取る__init__メソッドを持つ
+2. THE ToolHandlers SHALL 設定値を使用してExcelReaderを正しく初期化する
+3. THE MCP Server SHALL 起動時にTypeErrorなしで正常に初期化される
+4. THE Document Writer Tools SHALL 実際のライター実装を呼び出してファイルを生成する
+5. THE MCP Server SHALL 共通データモデル（DocumentContent、ReadResult、WriteResult）を定義し使用する
+6. THE MCP Server SHALL エラーレスポンスを{"success": false, "error": {...}}形式のJSONとして返す
+7. THE Google API Calls SHALL 最大3回のリトライと60秒のタイムアウトを実装する
+8. THE Document Readers SHALL ファイルサイズ、シート数、スライド数の制限を設定値に基づいて検証する
+9. THE Test Suite SHALL 各リーダー/ライター用の具体的なテストモジュールを含む

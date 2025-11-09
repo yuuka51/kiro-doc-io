@@ -86,6 +86,17 @@ class DocumentMCPServer:
 class PowerPointReader:
     """Read PowerPoint (.pptx) files"""
     
+    def __init__(self, max_slides: int = 500, max_file_size_mb: int = 100):
+        """
+        Initialize PowerPoint reader with configuration
+        
+        Args:
+            max_slides: Maximum number of slides to process
+            max_file_size_mb: Maximum file size in MB
+        """
+        self.max_slides = max_slides
+        self.max_file_size_mb = max_file_size_mb
+    
     def read_file(self, file_path: str) -> dict:
         """
         Extract content from PowerPoint file
@@ -112,6 +123,15 @@ class PowerPointReader:
 class WordReader:
     """Read Word (.docx) files"""
     
+    def __init__(self, max_file_size_mb: int = 100):
+        """
+        Initialize Word reader with configuration
+        
+        Args:
+            max_file_size_mb: Maximum file size in MB
+        """
+        self.max_file_size_mb = max_file_size_mb
+    
     def read_file(self, file_path: str) -> dict:
         """
         Extract content from Word file
@@ -137,6 +157,17 @@ class WordReader:
 class ExcelReader:
     """Read Excel (.xlsx) files"""
     
+    def __init__(self, max_sheets: int = 100, max_file_size_mb: int = 100):
+        """
+        Initialize Excel reader with configuration
+        
+        Args:
+            max_sheets: Maximum number of sheets to process
+            max_file_size_mb: Maximum file size in MB
+        """
+        self.max_sheets = max_sheets
+        self.max_file_size_mb = max_file_size_mb
+    
     def read_file(self, file_path: str) -> dict:
         """
         Extract content from Excel file
@@ -161,19 +192,33 @@ class ExcelReader:
 class GoogleWorkspaceReader:
     """Read Google Workspace files"""
     
-    def __init__(self, credentials_path: str):
+    def __init__(self, credentials_path: str, api_timeout_seconds: int = 60, max_retries: int = 3):
+        """
+        Initialize Google Workspace reader with configuration
+        
+        Args:
+            credentials_path: Path to Google API credentials
+            api_timeout_seconds: Timeout for API calls in seconds
+            max_retries: Maximum number of retry attempts
+        """
         self.credentials = self._load_credentials(credentials_path)
+        self.api_timeout = api_timeout_seconds
+        self.max_retries = max_retries
     
     def read_spreadsheet(self, file_id: str) -> dict:
-        """Read Google Spreadsheet"""
+        """Read Google Spreadsheet with retry logic"""
         pass
     
     def read_document(self, file_id: str) -> dict:
-        """Read Google Document"""
+        """Read Google Document with retry logic"""
         pass
     
     def read_slides(self, file_id: str) -> dict:
-        """Read Google Slides"""
+        """Read Google Slides with retry logic"""
+        pass
+    
+    def _execute_with_retry(self, request):
+        """Execute API request with retry and timeout"""
         pass
 ```
 
@@ -269,19 +314,33 @@ class ExcelWriter:
 class GoogleWorkspaceWriter:
     """Write Google Workspace files"""
     
-    def __init__(self, credentials_path: str):
+    def __init__(self, credentials_path: str, api_timeout_seconds: int = 60, max_retries: int = 3):
+        """
+        Initialize Google Workspace writer with configuration
+        
+        Args:
+            credentials_path: Path to Google API credentials
+            api_timeout_seconds: Timeout for API calls in seconds
+            max_retries: Maximum number of retry attempts
+        """
         self.credentials = self._load_credentials(credentials_path)
+        self.api_timeout = api_timeout_seconds
+        self.max_retries = max_retries
     
     def create_spreadsheet(self, data: dict, title: str) -> str:
-        """Create Google Spreadsheet and return URL"""
+        """Create Google Spreadsheet and return URL with retry logic"""
         pass
     
     def create_document(self, data: dict, title: str) -> str:
-        """Create Google Document and return URL"""
+        """Create Google Document and return URL with retry logic"""
         pass
     
     def create_slides(self, data: dict, title: str) -> str:
-        """Create Google Slides and return URL"""
+        """Create Google Slides and return URL with retry logic"""
+        pass
+    
+    def _execute_with_retry(self, request):
+        """Execute API request with retry and timeout"""
         pass
 ```
 
@@ -354,9 +413,11 @@ class WriteResult:
 
 ### エラーレスポンス形式
 
+MCPツールは以下の形式でエラーを返す必要があります：
+
 ```python
 {
-    "success": false,
+    "success": False,
     "error": {
         "type": "FileNotFoundError",
         "message": "指定されたファイルが見つかりません: /path/to/file.pptx",
@@ -365,11 +426,15 @@ class WriteResult:
 }
 ```
 
+**重要**: エラーレスポンスは文字列化せず、直接JSON構造として返す必要があります。クライアント側で再パースする必要がないようにします。
+
 ### エラーハンドリング戦略
 
 - すべての例外をキャッチし、適切なエラーメッセージを返す
 - ファイル操作前にファイルの存在と読み取り権限を確認
-- Google API呼び出しはリトライロジックを実装（最大3回）
+- ファイルサイズ制限を検証（設定値に基づく）
+- シート数/スライド数制限を検証（設定値に基づく）
+- Google API呼び出しはリトライロジックを実装（最大3回、指数バックオフ）
 - タイムアウト設定: ファイル読み取り30秒、API呼び出し60秒
 
 ## テスト戦略

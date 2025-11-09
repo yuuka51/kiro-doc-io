@@ -297,3 +297,68 @@
     - エラー情報はERRORレベルで出力
     - デバッグ情報はDEBUGレベルで出力
     - _要件: 10.4_
+
+- [x] 13. 実装と設計の乖離を修正する
+
+
+
+  - [x] 13.1 リーダークラスの初期化を修正する
+
+
+    - ExcelReaderの__init__メソッドにmax_sheets、max_file_size_mbパラメータを追加
+    - PowerPointReaderの__init__メソッドにmax_slides、max_file_size_mbパラメータを追加
+    - WordReaderの__init__メソッドにmax_file_size_mbパラメータを追加
+    - ToolHandlersでリーダーを初期化する際に設定値を正しく渡す
+    - サーバ起動時にTypeErrorが発生しないことを確認
+    - _要件: 11.1, 11.2, 11.3_
+  - [x] 13.2 ファイルサイズとコンテンツ制限の検証を実装する
+
+
+    - 各リーダーのread_fileメソッドでファイルサイズを検証
+    - ExcelReaderでシート数を設定値に基づいて検証
+    - PowerPointReaderでスライド数を設定値に基づいて検証
+    - 制限を超えた場合は適切なエラーを返す
+    - _要件: 11.8_
+  - [x] 13.3 書き込みツールの実装を完成させる
+
+
+    - handle_write_powerpointでPowerPointWriterを呼び出す実装を追加
+    - handle_write_wordでWordWriterを呼び出す実装を追加
+    - handle_write_excelでExcelWriterを呼び出す実装を追加
+    - handle_write_google_spreadsheetでGoogleWorkspaceWriterを呼び出す実装を追加
+    - handle_write_google_documentでGoogleWorkspaceWriterを呼び出す実装を追加
+    - handle_write_google_slidesでGoogleWorkspaceWriterを呼び出す実装を追加
+    - 「未実装」エラーを削除し、実際のライター呼び出しに置き換える
+    - _要件: 11.4_
+  - [x] 13.4 共通データモデルを定義する
+
+
+    - utils/models.pyを作成
+    - DocumentContent dataclassを定義（format_type、metadata、content）
+    - ReadResult dataclassを定義（success、content、error、file_path）
+    - WriteResult dataclassを定義（success、output_path、url、error）
+    - リーダー/ライターでこれらのモデルを使用するように修正
+    - _要件: 11.5_
+  - [x] 13.5 エラーレスポンス形式を修正する
+
+
+    - ToolHandlersの_error_responseメソッドを修正
+    - エラー辞書を文字列化せず、直接JSON構造として返す
+    - MCPプロトコルに準拠した形式でエラーを返す
+    - クライアント側で再パースが不要なことを確認
+    - _要件: 11.6_
+  - [x] 13.6 Google APIのリトライとタイムアウトを実装する
+
+
+    - GoogleWorkspaceReaderに_execute_with_retryメソッドを実装
+    - GoogleWorkspaceWriterに_execute_with_retryメソッドを実装
+    - 最大3回のリトライを実装（指数バックオフ）
+    - 60秒のタイムアウトを設定
+    - リトライ可能なエラー（ネットワークエラー、レート制限）を識別
+    - _要件: 11.7_
+  - [ ]* 13.7 テストスイートを整備する
+    - tests/readers/配下に各リーダーのテストファイルを作成
+    - tests/writers/配下に各ライターのテストファイルを作成
+    - 設計書で定義されたテストケースを実装
+    - 修正した機能の動作を検証するテストを追加
+    - _要件: 11.9_

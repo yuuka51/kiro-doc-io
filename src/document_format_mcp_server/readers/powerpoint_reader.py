@@ -18,6 +18,17 @@ logger = get_logger(__name__)
 class PowerPointReader:
     """PowerPoint (.pptx)ファイルを読み取るクラス。"""
 
+    def __init__(self, max_slides: int = 500, max_file_size_mb: int = 100):
+        """
+        PowerPointリーダーを初期化する。
+
+        Args:
+            max_slides: 処理する最大スライド数（デフォルト: 500）
+            max_file_size_mb: 処理する最大ファイルサイズ（MB）（デフォルト: 100）
+        """
+        self.max_slides = max_slides
+        self.max_file_size_mb = max_file_size_mb
+
     def read_file(self, file_path: str) -> dict[str, Any]:
         """
         PowerPointファイルからコンテンツを抽出する。
@@ -53,15 +64,39 @@ class PowerPointReader:
                 f"指定されたファイルが見つかりません: {file_path}",
                 details={"file_path": file_path}
             )
+        
+        # ファイルサイズの検証
+        file_size_mb = os.path.getsize(file_path) / (1024 * 1024)
+        if file_size_mb > self.max_file_size_mb:
+            logger.error(
+                f"ファイルサイズが制限を超えています: {file_size_mb:.2f}MB > {self.max_file_size_mb}MB"
+            )
+            raise CorruptedFileError(
+                f"ファイルサイズが制限を超えています: {file_size_mb:.2f}MB（最大: {self.max_file_size_mb}MB）",
+                details={
+                    "file_path": file_path,
+                    "file_size_mb": file_size_mb,
+                    "max_file_size_mb": self.max_file_size_mb
+                }
+            )
 
         try:
             # PowerPointファイルを開く
             prs = Presentation(file_path)
             
+            # スライド数の検証
+            slide_count = len(prs.slides)
+            if slide_count > self.max_slides:
+                logger.warning(
+                    f"スライド数が制限を超えています: {slide_count} > {self.max_slides}。"
+                    f"最初の{self.max_slides}スライドのみを処理します。"
+                )
+            
             slides_data = []
             
-            # 各スライドを処理
-            for idx, slide in enumerate(prs.slides, start=1):
+            # 各スライドを処理（制限まで）
+            slides_to_process = min(slide_count, self.max_slides)
+            for idx, slide in enumerate(list(prs.slides)[:slides_to_process], start=1):
                 slide_data = {
                     "slide_number": idx,
                     "title": self._extract_title(slide),
@@ -72,6 +107,10 @@ class PowerPointReader:
                 slides_data.append(slide_data)
             
             result = {"slides": slides_data}
+            
+            # スライド数制限の警告を追加
+            if slide_count > self.max_slides:
+                result["warning"] = f"ファイルには{slide_count}個のスライドがありますが、最初の{self.max_slides}スライドのみを処理しました。"
             
             # 処理時間を計算
             elapsed_time = time.time() - start_time

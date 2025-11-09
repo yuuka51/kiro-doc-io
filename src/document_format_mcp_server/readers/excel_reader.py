@@ -18,7 +18,16 @@ logger = get_logger(__name__)
 class ExcelReader:
     """Excel (.xlsx)ファイルを読み取るクラス。"""
 
-    MAX_SHEETS = 100  # 最大シート数の制限
+    def __init__(self, max_sheets: int = 100, max_file_size_mb: int = 100):
+        """
+        Excelリーダーを初期化する。
+
+        Args:
+            max_sheets: 処理する最大シート数（デフォルト: 100）
+            max_file_size_mb: 処理する最大ファイルサイズ（MB）（デフォルト: 100）
+        """
+        self.max_sheets = max_sheets
+        self.max_file_size_mb = max_file_size_mb
 
     def read_file(self, file_path: str) -> dict[str, Any]:
         """
@@ -53,6 +62,21 @@ class ExcelReader:
                 f"指定されたファイルが見つかりません: {file_path}",
                 details={"file_path": file_path}
             )
+        
+        # ファイルサイズの検証
+        file_size_mb = os.path.getsize(file_path) / (1024 * 1024)
+        if file_size_mb > self.max_file_size_mb:
+            logger.error(
+                f"ファイルサイズが制限を超えています: {file_size_mb:.2f}MB > {self.max_file_size_mb}MB"
+            )
+            raise CorruptedFileError(
+                f"ファイルサイズが制限を超えています: {file_size_mb:.2f}MB（最大: {self.max_file_size_mb}MB）",
+                details={
+                    "file_path": file_path,
+                    "file_size_mb": file_size_mb,
+                    "max_file_size_mb": self.max_file_size_mb
+                }
+            )
 
         try:
             # Excelファイルを開く（data_only=Falseで数式も取得）
@@ -60,13 +84,13 @@ class ExcelReader:
             
             # シート数の確認
             sheet_count = len(wb.sheetnames)
-            if sheet_count > self.MAX_SHEETS:
-                # 最大シート数を超える場合は警告を含めるが、最初の100シートを処理
+            if sheet_count > self.max_sheets:
+                # 最大シート数を超える場合は警告を含めるが、最初のmax_sheetsシートを処理
                 logger.warning(
-                    f"シート数が制限を超えています: {sheet_count} > {self.MAX_SHEETS}。"
-                    f"最初の{self.MAX_SHEETS}シートのみを処理します。"
+                    f"シート数が制限を超えています: {sheet_count} > {self.max_sheets}。"
+                    f"最初の{self.max_sheets}シートのみを処理します。"
                 )
-                sheets_to_process = wb.sheetnames[:self.MAX_SHEETS]
+                sheets_to_process = wb.sheetnames[:self.max_sheets]
             else:
                 sheets_to_process = wb.sheetnames
             
@@ -81,8 +105,8 @@ class ExcelReader:
             result = {"sheets": sheets_data}
             
             # シート数制限の警告を追加
-            if sheet_count > self.MAX_SHEETS:
-                result["warning"] = f"ファイルには{sheet_count}個のシートがありますが、最初の{self.MAX_SHEETS}シートのみを処理しました。"
+            if sheet_count > self.max_sheets:
+                result["warning"] = f"ファイルには{sheet_count}個のシートがありますが、最初の{self.max_sheets}シートのみを処理しました。"
             
             # 処理時間を計算
             elapsed_time = time.time() - start_time

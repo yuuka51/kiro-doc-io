@@ -18,6 +18,15 @@ logger = get_logger(__name__)
 class WordReader:
     """Word (.docx)ファイルを読み取るクラス。"""
 
+    def __init__(self, max_file_size_mb: int = 100):
+        """
+        Wordリーダーを初期化する。
+
+        Args:
+            max_file_size_mb: 処理する最大ファイルサイズ（MB）（デフォルト: 100）
+        """
+        self.max_file_size_mb = max_file_size_mb
+
     def read_file(self, file_path: str) -> dict[str, Any]:
         """
         Wordファイルからコンテンツを抽出する。
@@ -51,6 +60,21 @@ class WordReader:
             raise FileNotFoundError(
                 f"指定されたファイルが見つかりません: {file_path}",
                 details={"file_path": file_path}
+            )
+        
+        # ファイルサイズの検証
+        file_size_mb = os.path.getsize(file_path) / (1024 * 1024)
+        if file_size_mb > self.max_file_size_mb:
+            logger.error(
+                f"ファイルサイズが制限を超えています: {file_size_mb:.2f}MB > {self.max_file_size_mb}MB"
+            )
+            raise CorruptedFileError(
+                f"ファイルサイズが制限を超えています: {file_size_mb:.2f}MB（最大: {self.max_file_size_mb}MB）",
+                details={
+                    "file_path": file_path,
+                    "file_size_mb": file_size_mb,
+                    "max_file_size_mb": self.max_file_size_mb
+                }
             )
 
         try:
