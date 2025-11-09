@@ -22,7 +22,6 @@ classifiers = [
     "Programming Language :: Python :: 3.11",
     "Programming Language :: Python :: 3.12",
 ]
-
 dependencies = [
     "mcp>=0.1.0",
     "python-pptx>=0.6.21",
@@ -32,6 +31,12 @@ dependencies = [
     "google-auth-oauthlib>=1.1.0",
     "google-auth-httplib2>=0.1.1",
 ]
+
+[project.urls]
+Homepage = "https://github.com/yuuka51/kiro-doc-io"
+Repository = "https://github.com/yuuka51/kiro-doc-io"
+Documentation = "https://github.com/yuuka51/kiro-doc-io#readme"
+Issues = "https://github.com/yuuka51/kiro-doc-io/issues"
 
 [project.optional-dependencies]
 dev = [
