@@ -1,9 +1,37 @@
 {
+  // Google API認証情報ファイルのパス
+  // Google Cloud Consoleからダウンロードしたcredentials.jsonファイルを配置
   "google_credentials_path": "~/.config/kiro-mcp/google-credentials.json",
+  
+  // 生成されたファイルの出力先ディレクトリ
+  // PowerPoint、Word、Excelファイルがここに保存されます
   "output_directory": "~/Documents/kiro-output",
+  
+  // 読み取り可能な最大ファイルサイズ（MB単位）
+  // セキュリティとパフォーマンスのための制限
   "max_file_size_mb": 100,
+  
+  // Excelファイルで処理可能な最大シート数
+  // 大きなファイルの処理時間を制限
   "max_sheets": 100,
+  
+  // PowerPointファイルで処理可能な最大スライド数
+  // 大きなファイルの処理時間を制限
   "max_slides": 500,
+  
+  // Google API呼び出しのタイムアウト時間（秒）
+  // ネットワーク遅延やAPIレスポンス待機時間の上限
   "api_timeout_seconds": 60,
-  "enable_google_workspace": true
+  
+  // Google Workspace機能の有効/無効
+  // falseに設定すると、Google関連の機能が無効化されます
+  "enable_google_workspace": true,
+  
+  // ログレベル（DEBUG、INFO、WARNING、ERROR）
+  // 環境変数MCP_LOG_LEVELで上書き可能
+  "log_level": "INFO",
+  
+  // ファイル読み取りのタイムアウト時間（秒）
+  // ローカルファイルの読み取り処理の上限時間
+  "file_read_timeout_seconds": 30
 }
