@@ -65,9 +65,7 @@ token.json
 *.pptx
 *.docx
 *.xlsx
-!test_files/*.pptx
-!test_files/*.docx
-!test_files/*.xlsx
+test_files/
 output/
 
 # Logs
