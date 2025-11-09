@@ -28,12 +28,23 @@ def test_powerpoint_reader(file_path: str):
     
     try:
         reader = PowerPointReader()
-        result = reader.read_file(file_path)
+        read_result = reader.read_file(file_path)
         
-        logger.info("読み込み成功!")
-        logger.info(f"スライド数: {len(result['slides'])}")
+        # ReadResultデータクラスを検証
+        if not read_result.success:
+            logger.error(f"読み込み失敗: {read_result.error}")
+            return False
         
-        for slide in result['slides'][:3]:  # 最初の3スライドのみ表示
+        logger.info("✅ 読み込み成功!")
+        logger.info(f"ファイルパス: {read_result.file_path}")
+        logger.info(f"フォーマット: {read_result.content.format_type}")
+        logger.info(f"メタデータ: {read_result.content.metadata}")
+        
+        # コンテンツを取得
+        content = read_result.content.content
+        logger.info(f"スライド数: {len(content['slides'])}")
+        
+        for slide in content['slides'][:3]:  # 最初の3スライドのみ表示
             logger.info(f"--- スライド {slide['slide_number']} ---")
             logger.info(f"タイトル: {slide['title']}")
             content_preview = slide['content'][:100] + "..." if len(slide['content']) > 100 else slide['content']
@@ -55,12 +66,23 @@ def test_word_reader(file_path: str):
     
     try:
         reader = WordReader()
-        result = reader.read_file(file_path)
+        read_result = reader.read_file(file_path)
         
-        logger.info("読み込み成功!")
-        logger.info(f"段落数: {len(result['paragraphs'])}")
+        # ReadResultデータクラスを検証
+        if not read_result.success:
+            logger.error(f"読み込み失敗: {read_result.error}")
+            return False
         
-        for para in result['paragraphs'][:5]:  # 最初の5段落のみ表示
+        logger.info("✅ 読み込み成功!")
+        logger.info(f"ファイルパス: {read_result.file_path}")
+        logger.info(f"フォーマット: {read_result.content.format_type}")
+        logger.info(f"メタデータ: {read_result.content.metadata}")
+        
+        # コンテンツを取得
+        content = read_result.content.content
+        logger.info(f"段落数: {len(content['paragraphs'])}")
+        
+        for para in content['paragraphs'][:5]:  # 最初の5段落のみ表示
             para_type = "heading" if para.get('level', 0) > 0 else "paragraph"
             logger.info(f"--- {para_type} ---")
             if para.get('level', 0) > 0:
@@ -68,8 +90,8 @@ def test_word_reader(file_path: str):
             text_preview = para['text'][:100] + "..." if len(para['text']) > 100 else para['text']
             logger.info(f"テキスト: {text_preview}")
         
-        if result['tables']:
-            logger.info(f"表の数: {len(result['tables'])}")
+        if content['tables']:
+            logger.info(f"表の数: {len(content['tables'])}")
         
         return True
     except Exception as e:
@@ -85,12 +107,23 @@ def test_excel_reader(file_path: str):
     
     try:
         reader = ExcelReader()
-        result = reader.read_file(file_path)
+        read_result = reader.read_file(file_path)
         
-        logger.info("読み込み成功!")
-        logger.info(f"シート数: {len(result['sheets'])}")
+        # ReadResultデータクラスを検証
+        if not read_result.success:
+            logger.error(f"読み込み失敗: {read_result.error}")
+            return False
         
-        for sheet in result['sheets'][:3]:  # 最初の3シートのみ表示
+        logger.info("✅ 読み込み成功!")
+        logger.info(f"ファイルパス: {read_result.file_path}")
+        logger.info(f"フォーマット: {read_result.content.format_type}")
+        logger.info(f"メタデータ: {read_result.content.metadata}")
+        
+        # コンテンツを取得
+        content = read_result.content.content
+        logger.info(f"シート数: {len(content['sheets'])}")
+        
+        for sheet in content['sheets'][:3]:  # 最初の3シートのみ表示
             logger.info(f"--- シート: {sheet['name']} ---")
             row_count = len(sheet['data'])
             col_count = max(len(row) for row in sheet['data']) if sheet['data'] else 0
@@ -114,13 +147,24 @@ def test_google_spreadsheet(file_id_or_url: str, credentials_path: str):
     
     try:
         reader = GoogleWorkspaceReader(credentials_path)
-        result = reader.read_spreadsheet(file_id_or_url)
+        read_result = reader.read_spreadsheet(file_id_or_url)
         
-        logger.info("読み込み成功!")
-        logger.info(f"タイトル: {result['title']}")
-        logger.info(f"シート数: {len(result['sheets'])}")
+        # ReadResultデータクラスを検証
+        if not read_result.success:
+            logger.error(f"読み込み失敗: {read_result.error}")
+            return False
         
-        for sheet in result['sheets'][:2]:  # 最初の2シートのみ表示
+        logger.info("✅ 読み込み成功!")
+        logger.info(f"ファイルID: {read_result.file_path}")
+        logger.info(f"フォーマット: {read_result.content.format_type}")
+        logger.info(f"メタデータ: {read_result.content.metadata}")
+        
+        # コンテンツを取得
+        content = read_result.content.content
+        logger.info(f"タイトル: {content['title']}")
+        logger.info(f"シート数: {len(content['sheets'])}")
+        
+        for sheet in content['sheets'][:2]:  # 最初の2シートのみ表示
             logger.info(f"--- シート: {sheet['name']} ---")
             logger.info(f"行数: {sheet['row_count']}, 列数: {sheet['column_count']}")
             
@@ -142,13 +186,24 @@ def test_google_document(file_id_or_url: str, credentials_path: str):
     
     try:
         reader = GoogleWorkspaceReader(credentials_path)
-        result = reader.read_document(file_id_or_url)
+        read_result = reader.read_document(file_id_or_url)
         
-        logger.info("読み込み成功!")
-        logger.info(f"タイトル: {result['title']}")
-        logger.info(f"コンテンツ要素数: {len(result['content'])}")
+        # ReadResultデータクラスを検証
+        if not read_result.success:
+            logger.error(f"読み込み失敗: {read_result.error}")
+            return False
         
-        for item in result['content'][:5]:  # 最初の5要素のみ表示
+        logger.info("✅ 読み込み成功!")
+        logger.info(f"ファイルID: {read_result.file_path}")
+        logger.info(f"フォーマット: {read_result.content.format_type}")
+        logger.info(f"メタデータ: {read_result.content.metadata}")
+        
+        # コンテンツを取得
+        content = read_result.content.content
+        logger.info(f"タイトル: {content['title']}")
+        logger.info(f"コンテンツ要素数: {len(content['content'])}")
+        
+        for item in content['content'][:5]:  # 最初の5要素のみ表示
             logger.info(f"--- {item['type']} ---")
             if item['type'] in ['paragraph', 'heading']:
                 text_preview = item['text'][:100] + "..." if len(item['text']) > 100 else item['text']
@@ -170,13 +225,24 @@ def test_google_slides(file_id_or_url: str, credentials_path: str):
     
     try:
         reader = GoogleWorkspaceReader(credentials_path)
-        result = reader.read_slides(file_id_or_url)
+        read_result = reader.read_slides(file_id_or_url)
         
-        logger.info("読み込み成功!")
-        logger.info(f"タイトル: {result['title']}")
-        logger.info(f"スライド数: {len(result['slides'])}")
+        # ReadResultデータクラスを検証
+        if not read_result.success:
+            logger.error(f"読み込み失敗: {read_result.error}")
+            return False
         
-        for slide in result['slides'][:3]:  # 最初の3スライドのみ表示
+        logger.info("✅ 読み込み成功!")
+        logger.info(f"ファイルID: {read_result.file_path}")
+        logger.info(f"フォーマット: {read_result.content.format_type}")
+        logger.info(f"メタデータ: {read_result.content.metadata}")
+        
+        # コンテンツを取得
+        content = read_result.content.content
+        logger.info(f"タイトル: {content['title']}")
+        logger.info(f"スライド数: {len(content['slides'])}")
+        
+        for slide in content['slides'][:3]:  # 最初の3スライドのみ表示
             logger.info(f"--- スライド {slide['slide_number']} ---")
             logger.info(f"要素数: {len(slide['elements'])}")
             
@@ -234,9 +300,9 @@ def main():
         logger.info("テストファイルのパスを設定してください:")
         
         # テストファイルのパス（ここを編集）
-        pptx_file = "test_files/sample.pptx"
-        docx_file = "test_files/sample.docx"
-        xlsx_file = "test_files/sample.xlsx"
+        pptx_file = "test_files/samples/sample.pptx"
+        docx_file = "test_files/samples/sample.docx"
+        xlsx_file = "test_files/samples/sample.xlsx"
         
         logger.info(f"   PowerPoint: {pptx_file}")
         logger.info(f"   Word: {docx_file}")

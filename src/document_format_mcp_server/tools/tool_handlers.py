@@ -770,19 +770,13 @@ class ToolHandlers:
         成功レスポンスを生成する。
         
         Args:
-            content: レスポンスコンテンツ
+            content: レスポンスコンテンツ（既にsuccessフラグを含む辞書）
             
         Returns:
-            成功レスポンス（ネイティブJSON構造）
+            成功レスポンス（JSON本体を直接返す）
         """
-        return {
-            "content": [
-                {
-                    "type": "text",
-                    "text": content
-                }
-            ]
-        }
+        # contentをそのまま返す（MCPラッパーなし）
+        return content
     
     def _error_response(self, error: DocumentMCPError) -> dict[str, Any]:
         """
@@ -792,23 +786,14 @@ class ToolHandlers:
             error: エラーオブジェクト
             
         Returns:
-            エラーレスポンス（ネイティブJSON構造）
+            エラーレスポンス（JSON本体を直接返す）
         """
-        error_data = {
+        # successフラグ付きのエラーレスポンスを直接返す
+        return {
             "success": False,
             "error": {
                 "type": type(error).__name__,
                 "message": error.message,
                 "details": error.details
             }
-        }
-        
-        return {
-            "content": [
-                {
-                    "type": "text",
-                    "text": error_data
-                }
-            ],
-            "isError": True
         }
