@@ -51,7 +51,7 @@ python create_sample_files.py
 python test_readers.py
 ```
 
-詳細は [QUICKSTART.md](QUICKSTART.md) を参照してください。
+詳細は [docs/QUICKSTART.md](docs/QUICKSTART.md) を参照してください。
 
 ## インストール方法
 
@@ -417,7 +417,7 @@ Googleスライドを生成します。
 
 ### Local Development Setup
 
-詳細なセットアップ手順は [SETUP.md](SETUP.md) を参照してください。
+詳細なセットアップ手順は [docs/SETUP.md](docs/SETUP.md) を参照してください。
 
 #### Using uv (Recommended)
 
@@ -448,22 +448,22 @@ pip install -r requirements.txt
 #### Generate Sample Files
 
 ```bash
-python create_sample_files.py
+python scripts/setup/create_sample_files.py
 ```
 
 This creates:
-- `test_files/sample.pptx` - PowerPoint file with 3 slides
-- `test_files/sample.docx` - Word file with headings, paragraphs, and tables
-- `test_files/sample.xlsx` - Excel file with 3 sheets
+- `test_files/samples/sample.pptx` - PowerPoint file with 3 slides
+- `test_files/samples/sample.docx` - Word file with headings, paragraphs, and tables
+- `test_files/samples/sample.xlsx` - Excel file with 3 sheets
 
 #### Run Tests
 
 ```bash
 # Test local files (PowerPoint, Word, Excel)
-python test_readers.py
+python tests/test_readers.py
 
 # Test Google Workspace files
-python test_readers.py --google
+python tests/test_readers.py --google
 ```
 
 ### プロジェクト構造
@@ -496,16 +496,42 @@ document-format-mcp-server/
 │           └── logging_config.py     # ログ設定
 ├── tests/                         # ユニットテスト
 │   ├── readers/                   # リーダーテスト
-│   └── writers/                   # ライターテスト
-├── test_files/                    # テスト用サンプルファイル
+│   ├── writers/                   # ライターテスト
+│   ├── test_readers.py            # リーダー機能テストスクリプト
+│   ├── test_writers.py            # ライター機能テストスクリプト
+│   ├── test_powerpoint_writer.py  # PowerPointライターテスト
+│   └── test_spec_export.py        # 仕様書エクスポートテスト
+├── scripts/                       # ユーティリティスクリプト
+│   ├── analysis/                  # 分析系スクリプト
+│   │   ├── analyze_and_create_spec.py
+│   │   ├── analyze_excel_structure.py
+│   │   └── check_excel_content.py
+│   ├── export/                    # エクスポート系スクリプト
+│   │   ├── export_all_to_readers.py
+│   │   ├── export_excel_to_md.py
+│   │   └── export_spec_to_md.py
+│   ├── demo/                      # デモ・検証スクリプト
+│   │   ├── demo_readers.py
+│   │   ├── verify_generated_pptx.py
+│   │   └── verify_spec_export.py
+│   ├── setup/                     # セットアップ系スクリプト
+│   │   ├── create_sample_files.py
+│   │   └── create_specification.py
+│   └── README.md                  # スクリプト説明
+├── docs/                          # ドキュメント
+│   ├── QUICKSTART.md              # 5分クイックスタートガイド
+│   ├── SETUP.md                   # 詳細セットアップガイド
+│   └── GOOGLE_API_SETUP.md        # Google API認証情報取得ガイド
+├── test_files/                    # テスト用ファイル
+│   ├── samples/                   # サンプルファイル
+│   └── [生成されたテストファイル]
+├── output/                        # 生成された出力ファイル
 ├── .config/                       # 設定ファイル（ローカル）
 │   └── google-credentials.json    # Google API認証情報
-├── test_readers.py                # リーダー機能テストスクリプト
-├── test_writers.py                # ライター機能テストスクリプト
-├── create_sample_files.py         # サンプルファイル生成スクリプト
+├── .kiro/                         # Kiro設定
+│   ├── specs/                     # 仕様書
+│   └── steering/                  # ステアリングルール
 ├── config.json.example            # 設定ファイルのサンプル
-├── QUICKSTART.md                  # 5分クイックスタートガイド
-├── SETUP.md                       # 詳細セットアップガイド
 ├── README.md                      # このファイル
 ├── requirements.txt               # Python依存関係
 └── pyproject.toml                 # プロジェクト設定
@@ -620,9 +646,9 @@ MCPサーバーを設定した後、Kiroで以下のように使用できます�
 ## ドキュメント
 
 ### ユーザー向けドキュメント
-- [QUICKSTART.md](QUICKSTART.md) - 5分で動作確認できるクイックスタートガイド
-- [SETUP.md](SETUP.md) - 詳細なセットアップとトラブルシューティング
-- [GOOGLE_API_SETUP.md](GOOGLE_API_SETUP.md) - Google API認証情報の取得方法（詳細ガイド）
+- [docs/QUICKSTART.md](docs/QUICKSTART.md) - 5分で動作確認できるクイックスタートガイド
+- [docs/SETUP.md](docs/SETUP.md) - 詳細なセットアップとトラブルシューティング
+- [docs/GOOGLE_API_SETUP.md](docs/GOOGLE_API_SETUP.md) - Google API認証情報の取得方法（詳細ガイド）
 - [config.json.example](config.json.example) - 設定ファイルのサンプル
 - [.kiro/settings/mcp.json.example](.kiro/settings/mcp.json.example) - Kiro MCP設定のサンプル
 

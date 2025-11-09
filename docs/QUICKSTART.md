@@ -21,10 +21,10 @@ pip install -r requirements.txt
 ### ステップ2: サンプルファイル生成（1分）
 
 ```bash
-python create_sample_files.py
+python scripts/setup/create_sample_files.py
 ```
 
-これで`test_files/`ディレクトリに以下のファイルが生成されます:
+これで`test_files/samples/`ディレクトリに以下のファイルが生成されます:
 - `sample.pptx` - PowerPointファイル
 - `sample.docx` - Wordファイル
 - `sample.xlsx` - Excelファイル
@@ -32,14 +32,14 @@ python create_sample_files.py
 ### ステップ3: テスト実行（2分）
 
 ```bash
-python test_readers.py
+python tests/test_readers.py
 ```
 
 成功すると、各ファイルの内容が表示されます:
 
 ```
 ============================================================
-PowerPointファイルを読み込み中: test_files/sample.pptx
+PowerPointファイルを読み込み中: test_files/samples/sample.pptx
 ============================================================
 
 ✅ 読み込み成功!
@@ -74,7 +74,7 @@ mkdir .config
 
 ### ステップ3: テストファイルのURLを設定
 
-`test_readers.py`を編集:
+`tests/test_readers.py`を編集:
 
 ```python
 # 85行目あたり
@@ -94,7 +94,7 @@ test_google_slides(slides_url, credentials_path)
 ### ステップ4: テスト実行
 
 ```bash
-python test_readers.py --google
+python tests/test_readers.py --google
 ```
 
 初回実行時、ブラウザが開いてGoogle認証が求められます。
@@ -112,7 +112,7 @@ uv pip install -r requirements.txt
 
 ```bash
 # サンプルファイルを再生成
-python create_sample_files.py
+python scripts/setup/create_sample_files.py
 ```
 
 ### Google認証エラー
@@ -137,4 +137,4 @@ python create_sample_files.py
 
 ## 参考
 
-詳細なセットアップ手順は`SETUP.md`を参照してください。
+詳細なセットアップ手順は`docs/SETUP.md`を参照してください。

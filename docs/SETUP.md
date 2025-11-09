@@ -47,15 +47,15 @@ pip install -r requirements.txt
 
 ### ローカルファイルのテスト
 
-1. `test_files`ディレクトリを作成:
+1. サンプルファイルを生成:
 ```bash
-mkdir test_files
+python scripts/setup/create_sample_files.py
 ```
 
-2. テスト用のファイルを配置:
-   - `test_files/sample.pptx` - PowerPointファイル
-   - `test_files/sample.docx` - Wordファイル
-   - `test_files/sample.xlsx` - Excelファイル
+2. 以下のファイルが`test_files/samples/`に生成されます:
+   - `sample.pptx` - PowerPointファイル
+   - `sample.docx` - Wordファイル
+   - `sample.xlsx` - Excelファイル
 
 ### Google Workspaceファイルのテスト
 
@@ -76,21 +76,21 @@ mkdir -p .config
 
 ### ローカルファイルのテスト
 
-1. `test_readers.py`を編集してファイルパスを設定:
+1. `tests/test_readers.py`を編集してファイルパスを設定:
 ```python
-pptx_file = "test_files/sample.pptx"
-docx_file = "test_files/sample.docx"
-xlsx_file = "test_files/sample.xlsx"
+pptx_file = "test_files/samples/sample.pptx"
+docx_file = "test_files/samples/sample.docx"
+xlsx_file = "test_files/samples/sample.xlsx"
 ```
 
 2. テストを実行:
 ```bash
-python test_readers.py
+python tests/test_readers.py
 ```
 
 ### Google Workspaceファイルのテスト
 
-1. `test_readers.py`を編集して認証情報とファイルURLを設定:
+1. `tests/test_readers.py`を編集して認証情報とファイルURLを設定:
 ```python
 credentials_path = ".config/google-credentials.json"
 spreadsheet_url = "https://docs.google.com/spreadsheets/d/YOUR_SPREADSHEET_ID/edit"
@@ -100,7 +100,7 @@ slides_url = "https://docs.google.com/presentation/d/YOUR_SLIDES_ID/edit"
 
 2. テストを実行:
 ```bash
-python test_readers.py --google
+python tests/test_readers.py --google
 ```
 
 3. 初回実行時、ブラウザが開いてGoogle認証が求められます
