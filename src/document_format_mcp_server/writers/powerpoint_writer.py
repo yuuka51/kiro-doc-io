@@ -8,6 +8,7 @@ from pptx import Presentation
 
 from ..utils.errors import ValidationError
 from ..utils.logging_config import get_logger
+from ..utils.models import WriteResult
 
 
 # ロガーの取得
@@ -17,7 +18,7 @@ logger = get_logger(__name__)
 class PowerPointWriter:
     """PowerPoint (.pptx)ファイルを生成するクラス。"""
 
-    def create_presentation(self, data: dict[str, Any], output_path: str) -> str:
+    def create_presentation(self, data: dict[str, Any], output_path: str) -> WriteResult:
         """
         構造化データからPowerPointファイルを生成する。
 
@@ -36,7 +37,7 @@ class PowerPointWriter:
             output_path: 出力ファイルのパス
 
         Returns:
-            作成されたファイルのパス
+            WriteResult: 書き込み結果を含むデータクラス
 
         Raises:
             ValidationError: 入力データが不正な場合
@@ -90,19 +91,34 @@ class PowerPointWriter:
                 f"(スライド数: {len(slides_data)}, 処理時間: {elapsed_time:.2f}秒)"
             )
 
-            return output_path
+            # WriteResultを返す
+            return WriteResult(
+                success=True,
+                output_path=output_path,
+                url=None,
+                error=None
+            )
 
-        except ValidationError:
-            # ValidationErrorはそのまま再送出
-            raise
+        except ValidationError as e:
+            # ValidationErrorはWriteResultとして返す
+            logger.error(f"PowerPointファイルの生成エラー（検証失敗）: {output_path}", exc_info=True)
+            return WriteResult(
+                success=False,
+                output_path=None,
+                url=None,
+                error=str(e)
+            )
         except Exception as e:
             logger.error(
                 f"PowerPointファイルの生成中にエラーが発生: {output_path}",
                 exc_info=True
             )
-            raise Exception(
-                f"PowerPointファイルの生成中にエラーが発生しました: {str(e)}"
-            ) from e
+            return WriteResult(
+                success=False,
+                output_path=None,
+                url=None,
+                error=f"PowerPointファイルの生成中にエラーが発生しました: {str(e)}"
+            )
 
     def _validate_data(self, data: dict[str, Any]) -> None:
         """入力データを検証する。"""

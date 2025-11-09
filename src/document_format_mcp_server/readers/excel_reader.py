@@ -9,6 +9,7 @@ from openpyxl.utils.exceptions import InvalidFileException
 
 from ..utils.errors import FileNotFoundError, CorruptedFileError
 from ..utils.logging_config import get_logger
+from ..utils.models import ReadResult, DocumentContent
 
 
 # ロガーの取得
@@ -29,7 +30,7 @@ class ExcelReader:
         self.max_sheets = max_sheets
         self.max_file_size_mb = max_file_size_mb
 
-    def read_file(self, file_path: str) -> dict[str, Any]:
+    def read_file(self, file_path: str) -> ReadResult:
         """
         Excelファイルからコンテンツを抽出する。
 
@@ -37,16 +38,7 @@ class ExcelReader:
             file_path: 読み取るExcelファイルのパス
 
         Returns:
-            抽出されたコンテンツを含む辞書:
-            {
-                "sheets": [
-                    {
-                        "name": str,
-                        "data": [[cell_value, ...], ...],
-                        "formulas": {...}
-                    }
-                ]
-            }
+            ReadResult: 読み取り結果を含むデータクラス
 
         Raises:
             FileNotFoundError: ファイルが存在しない場合
@@ -102,11 +94,26 @@ class ExcelReader:
                 sheet_data = self._extract_sheet_data(sheet)
                 sheets_data.append(sheet_data)
             
-            result = {"sheets": sheets_data}
+            content_dict = {"sheets": sheets_data}
+            
+            # メタデータを作成
+            metadata = {
+                "sheet_count": len(sheets_data),
+                "total_sheets": sheet_count,
+                "file_size_mb": file_size_mb
+            }
             
             # シート数制限の警告を追加
             if sheet_count > self.max_sheets:
-                result["warning"] = f"ファイルには{sheet_count}個のシートがありますが、最初の{self.max_sheets}シートのみを処理しました。"
+                content_dict["warning"] = f"ファイルには{sheet_count}個のシートがありますが、最初の{self.max_sheets}シートのみを処理しました。"
+                metadata["warning"] = content_dict["warning"]
+            
+            # DocumentContentを作成
+            document_content = DocumentContent(
+                format_type="xlsx",
+                metadata=metadata,
+                content=content_dict
+            )
             
             # 処理時間を計算
             elapsed_time = time.time() - start_time
@@ -116,16 +123,33 @@ class ExcelReader:
             )
             logger.debug(f"抽出されたデータの概要: シート数={len(sheets_data)}")
             
-            return result
+            # ReadResultを返す
+            return ReadResult(
+                success=True,
+                content=document_content,
+                error=None,
+                file_path=file_path
+            )
         
+        except (FileNotFoundError, CorruptedFileError) as e:
+            # 既知のエラーはReadResultとして返す
+            logger.error(f"Excelファイルの読み込みエラー: {file_path}", exc_info=True)
+            return ReadResult(
+                success=False,
+                content=None,
+                error=str(e),
+                file_path=file_path
+            )
         except InvalidFileException as e:
             logger.error(
                 f"Excelファイルが破損しています: {file_path}",
                 exc_info=True
             )
-            raise CorruptedFileError(
-                f"Excelファイルが破損しているか、読み取り不可能です: {file_path}",
-                details={"file_path": file_path, "error": str(e)}
+            return ReadResult(
+                success=False,
+                content=None,
+                error=f"Excelファイルが破損しているか、読み取り不可能です: {file_path}",
+                file_path=file_path
             )
         except Exception as e:
             # その他の予期しないエラー
@@ -133,9 +157,11 @@ class ExcelReader:
                 f"Excelファイルの読み取り中にエラーが発生: {file_path}",
                 exc_info=True
             )
-            raise CorruptedFileError(
-                f"Excelファイルの読み取り中にエラーが発生しました: {file_path}",
-                details={"file_path": file_path, "error": str(e)}
+            return ReadResult(
+                success=False,
+                content=None,
+                error=f"Excelファイルの読み取り中にエラーが発生しました: {str(e)}",
+                file_path=file_path
             )
 
     def _extract_sheet_data(self, sheet) -> dict[str, Any]:

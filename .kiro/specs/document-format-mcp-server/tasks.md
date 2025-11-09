@@ -330,31 +330,40 @@
     - handle_write_google_slidesでGoogleWorkspaceWriterを呼び出す実装を追加
     - 「未実装」エラーを削除し、実際のライター呼び出しに置き換える
     - _要件: 11.4_
-  - [x] 13.4 共通データモデルを定義する
+  - [x] 13.4 共通データモデルを実際に使用する
 
 
-    - utils/models.pyを作成
-    - DocumentContent dataclassを定義（format_type、metadata、content）
-    - ReadResult dataclassを定義（success、content、error、file_path）
-    - WriteResult dataclassを定義（success、output_path、url、error）
-    - リーダー/ライターでこれらのモデルを使用するように修正
-    - _要件: 11.5_
-  - [x] 13.5 エラーレスポンス形式を修正する
+
+
+    - utils/models.pyは既に作成済み（DocumentContent、ReadResult、WriteResult）
+    - 各リーダーのread_fileメソッドの戻り値をReadResultに変更
+    - 各ライターのcreate_*メソッドの戻り値をWriteResultに変更
+    - ToolHandlersでReadResult/WriteResultを適切に処理
+    - 生の辞書ではなく、型安全なデータクラスを使用することを確認
+    --_要件: 11.5_
+
+  - [x] 13.5 エラーレスポンスを直接JSON構造として返す
+
+
 
 
     - ToolHandlersの_error_responseメソッドを修正
-    - エラー辞書を文字列化せず、直接JSON構造として返す
-    - MCPプロトコルに準拠した形式でエラーを返す
-    - クライアント側で再パースが不要なことを確認
-    - _要件: 11.6_
-  - [x] 13.6 Google APIのリトライとタイムアウトを実装する
+    - json.dumps()でエラー辞書を文字列化するのを停止
+    - エラー辞書を直接MCPレスポンスとして返す
+    - _success_responseも同様に修正（JSON文字列化を削除）
+    - MCPプロトコルがネイティブJSON構造を受け取ることを確認
+    --_要件: 11.6_
+
+  - [x] 13.6 Google APIのリトライとタイムアウトを実際に使用する
 
 
-    - GoogleWorkspaceReaderに_execute_with_retryメソッドを実装
-    - GoogleWorkspaceWriterに_execute_with_retryメソッドを実装
-    - 最大3回のリトライを実装（指数バックオフ）
-    - 60秒のタイムアウトを設定
-    - リトライ可能なエラー（ネットワークエラー、レート制限）を識別
+
+
+    - GoogleWorkspaceReaderの_execute_with_retryメソッドは既に実装済み
+    - GoogleWorkspaceWriterの_execute_with_retryメソッドは既に実装済み
+    - read_spreadsheet/read_document/read_slidesで.execute()の直接呼び出しを_execute_with_retry()に置き換え
+    - create_spreadsheet/create_document/create_slidesで.execute()の直接呼び出しを_execute_with_retry()に置き換え
+    - すべてのGoogle API呼び出しがリトライロジックを通過することを確認
     - _要件: 11.7_
   - [ ]* 13.7 テストスイートを整備する
     - tests/readers/配下に各リーダーのテストファイルを作成

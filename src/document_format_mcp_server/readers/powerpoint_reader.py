@@ -9,6 +9,7 @@ from pptx.exc import PackageNotFoundError
 
 from ..utils.errors import FileNotFoundError, CorruptedFileError
 from ..utils.logging_config import get_logger
+from ..utils.models import ReadResult, DocumentContent
 
 
 # ロガーの取得
@@ -29,7 +30,7 @@ class PowerPointReader:
         self.max_slides = max_slides
         self.max_file_size_mb = max_file_size_mb
 
-    def read_file(self, file_path: str) -> dict[str, Any]:
+    def read_file(self, file_path: str) -> ReadResult:
         """
         PowerPointファイルからコンテンツを抽出する。
 
@@ -37,18 +38,7 @@ class PowerPointReader:
             file_path: 読み取るPowerPointファイルのパス
 
         Returns:
-            抽出されたコンテンツを含む辞書:
-            {
-                "slides": [
-                    {
-                        "slide_number": int,
-                        "title": str,
-                        "content": str,
-                        "notes": str,
-                        "tables": [...]
-                    }
-                ]
-            }
+            ReadResult: 読み取り結果を含むデータクラス
 
         Raises:
             FileNotFoundError: ファイルが存在しない場合
@@ -106,11 +96,26 @@ class PowerPointReader:
                 }
                 slides_data.append(slide_data)
             
-            result = {"slides": slides_data}
+            content_dict = {"slides": slides_data}
+            
+            # メタデータを作成
+            metadata = {
+                "slide_count": len(slides_data),
+                "total_slides": slide_count,
+                "file_size_mb": file_size_mb
+            }
             
             # スライド数制限の警告を追加
             if slide_count > self.max_slides:
-                result["warning"] = f"ファイルには{slide_count}個のスライドがありますが、最初の{self.max_slides}スライドのみを処理しました。"
+                content_dict["warning"] = f"ファイルには{slide_count}個のスライドがありますが、最初の{self.max_slides}スライドのみを処理しました。"
+                metadata["warning"] = content_dict["warning"]
+            
+            # DocumentContentを作成
+            document_content = DocumentContent(
+                format_type="pptx",
+                metadata=metadata,
+                content=content_dict
+            )
             
             # 処理時間を計算
             elapsed_time = time.time() - start_time
@@ -120,16 +125,33 @@ class PowerPointReader:
             )
             logger.debug(f"抽出されたデータの概要: スライド数={len(slides_data)}")
             
-            return result
+            # ReadResultを返す
+            return ReadResult(
+                success=True,
+                content=document_content,
+                error=None,
+                file_path=file_path
+            )
         
+        except (FileNotFoundError, CorruptedFileError) as e:
+            # 既知のエラーはReadResultとして返す
+            logger.error(f"PowerPointファイルの読み込みエラー: {file_path}", exc_info=True)
+            return ReadResult(
+                success=False,
+                content=None,
+                error=str(e),
+                file_path=file_path
+            )
         except PackageNotFoundError as e:
             logger.error(
                 f"PowerPointファイルが破損しています: {file_path}",
                 exc_info=True
             )
-            raise CorruptedFileError(
-                f"PowerPointファイルが破損しているか、読み取り不可能です: {file_path}",
-                details={"file_path": file_path, "error": str(e)}
+            return ReadResult(
+                success=False,
+                content=None,
+                error=f"PowerPointファイルが破損しているか、読み取り不可能です: {file_path}",
+                file_path=file_path
             )
         except Exception as e:
             # その他の予期しないエラー
@@ -137,9 +159,11 @@ class PowerPointReader:
                 f"PowerPointファイルの読み取り中にエラーが発生: {file_path}",
                 exc_info=True
             )
-            raise CorruptedFileError(
-                f"PowerPointファイルの読み取り中にエラーが発生しました: {file_path}",
-                details={"file_path": file_path, "error": str(e)}
+            return ReadResult(
+                success=False,
+                content=None,
+                error=f"PowerPointファイルの読み取り中にエラーが発生しました: {str(e)}",
+                file_path=file_path
             )
 
     def _extract_title(self, slide) -> str:

@@ -10,6 +10,7 @@ from openpyxl.utils import get_column_letter
 
 from ..utils.errors import ValidationError
 from ..utils.logging_config import get_logger
+from ..utils.models import WriteResult
 
 
 # ロガーの取得
@@ -19,7 +20,7 @@ logger = get_logger(__name__)
 class ExcelWriter:
     """Excel (.xlsx)ファイルを生成するクラス。"""
 
-    def create_workbook(self, data: dict[str, Any], output_path: str) -> str:
+    def create_workbook(self, data: dict[str, Any], output_path: str) -> WriteResult:
         """
         構造化データからExcelファイルを生成する。
 
@@ -97,19 +98,34 @@ class ExcelWriter:
                 f"(シート数: {len(sheets_data)}, 処理時間: {elapsed_time:.2f}秒)"
             )
 
-            return output_path
+            # WriteResultを返す
+            return WriteResult(
+                success=True,
+                output_path=output_path,
+                url=None,
+                error=None
+            )
 
-        except ValidationError:
-            # ValidationErrorはそのまま再送出
-            raise
+        except ValidationError as e:
+            # ValidationErrorはWriteResultとして返す
+            logger.error(f"Excelファイルの生成エラー（検証失敗）: {output_path}", exc_info=True)
+            return WriteResult(
+                success=False,
+                output_path=None,
+                url=None,
+                error=str(e)
+            )
         except Exception as e:
             logger.error(
                 f"Excelファイルの生成中にエラーが発生: {output_path}",
                 exc_info=True
             )
-            raise Exception(
-                f"Excelファイルの生成中にエラーが発生しました: {str(e)}"
-            ) from e
+            return WriteResult(
+                success=False,
+                output_path=None,
+                url=None,
+                error=f"Excelファイルの生成中にエラーが発生しました: {str(e)}"
+            )
 
     def _validate_data(self, data: dict[str, Any]) -> None:
         """入力データを検証する。"""

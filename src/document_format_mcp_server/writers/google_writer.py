@@ -12,11 +12,11 @@ from googleapiclient.errors import HttpError
 
 from ..utils.errors import (
     AuthenticationError,
-    PermissionError,
     APIError,
     ConfigurationError,
 )
 from ..utils.logging_config import get_logger
+from ..utils.models import WriteResult
 
 
 # ロガーの取得
@@ -205,7 +205,7 @@ class GoogleWorkspaceWriter:
             details={"last_error": str(last_exception)}
         )
 
-    def create_spreadsheet(self, data: dict[str, Any], title: str) -> str:
+    def create_spreadsheet(self, data: dict[str, Any], title: str) -> WriteResult:
         """
         Googleスプレッドシートを作成する。
 
@@ -241,9 +241,11 @@ class GoogleWorkspaceWriter:
                 }
             }
 
-            spreadsheet = service.spreadsheets().create(
-                body=spreadsheet_body
-            ).execute()
+            spreadsheet = self._execute_with_retry(
+                lambda: service.spreadsheets().create(
+                    body=spreadsheet_body
+                ).execute()
+            )
 
             spreadsheet_id = spreadsheet['spreadsheetId']
             spreadsheet_url = spreadsheet['spreadsheetUrl']
@@ -261,12 +263,14 @@ class GoogleWorkspaceWriter:
 
                 if sheet_data:
                     # デフォルトのSheet1にデータを書き込む
-                    service.spreadsheets().values().update(
-                        spreadsheetId=spreadsheet_id,
-                        range='Sheet1!A1',
-                        valueInputOption='RAW',
-                        body={'values': sheet_data}
-                    ).execute()
+                    self._execute_with_retry(
+                        lambda: service.spreadsheets().values().update(
+                            spreadsheetId=spreadsheet_id,
+                            range='Sheet1!A1',
+                            valueInputOption='RAW',
+                            body={'values': sheet_data}
+                        ).execute()
+                    )
 
                     # Sheet1の名前を変更
                     if sheet_name != 'Sheet1':
@@ -279,10 +283,12 @@ class GoogleWorkspaceWriter:
                                 'fields': 'title'
                             }
                         }]
-                        service.spreadsheets().batchUpdate(
-                            spreadsheetId=spreadsheet_id,
-                            body={'requests': requests}
-                        ).execute()
+                        self._execute_with_retry(
+                            lambda: service.spreadsheets().batchUpdate(
+                                spreadsheetId=spreadsheet_id,
+                                body={'requests': requests}
+                            ).execute()
+                        )
 
                 # 追加のシートを作成
                 for idx, sheet in enumerate(sheets[1:], start=1):
@@ -297,19 +303,23 @@ class GoogleWorkspaceWriter:
                             }
                         }
                     }]
-                    service.spreadsheets().batchUpdate(
-                        spreadsheetId=spreadsheet_id,
-                        body={'requests': requests}
-                    ).execute()
+                    self._execute_with_retry(
+                        lambda req=requests: service.spreadsheets().batchUpdate(
+                            spreadsheetId=spreadsheet_id,
+                            body={'requests': req}
+                        ).execute()
+                    )
 
                     # データを書き込む
                     if sheet_data:
-                        service.spreadsheets().values().update(
-                            spreadsheetId=spreadsheet_id,
-                            range=f'{sheet_name}!A1',
-                            valueInputOption='RAW',
-                            body={'values': sheet_data}
-                        ).execute()
+                        self._execute_with_retry(
+                            lambda sn=sheet_name, sd=sheet_data: service.spreadsheets().values().update(
+                                spreadsheetId=spreadsheet_id,
+                                range=f'{sn}!A1',
+                                valueInputOption='RAW',
+                                body={'values': sd}
+                            ).execute()
+                        )
 
             # 処理時間を計算
             elapsed_time = time.time() - start_time
@@ -318,35 +328,47 @@ class GoogleWorkspaceWriter:
                 f"(URL: {spreadsheet_url}, シート数: {len(sheets)}, 処理時間: {elapsed_time:.2f}秒)"
             )
 
-            return spreadsheet_url
+            # WriteResultを返す
+            return WriteResult(
+                success=True,
+                output_path=None,
+                url=spreadsheet_url,
+                error=None
+            )
 
         except HttpError as e:
             if e.resp.status == 403:
                 logger.error("Googleスプレッドシートの作成権限がありません")
-                raise PermissionError(
-                    "Googleスプレッドシートの作成権限がありません",
-                    details={"error": str(e)}
+                return WriteResult(
+                    success=False,
+                    output_path=None,
+                    url=None,
+                    error="Googleスプレッドシートの作成権限がありません"
                 )
             else:
                 logger.error(
                     "Googleスプレッドシートの作成中にエラーが発生",
                     exc_info=True
                 )
-                raise APIError(
-                    "Googleスプレッドシートの作成中にエラーが発生しました",
-                    details={"status": e.resp.status, "error": str(e)}
+                return WriteResult(
+                    success=False,
+                    output_path=None,
+                    url=None,
+                    error=f"Googleスプレッドシートの作成中にエラーが発生しました: {str(e)}"
                 )
         except Exception as e:
             logger.error(
                 "Googleスプレッドシートの作成中に予期しないエラーが発生",
                 exc_info=True
             )
-            raise APIError(
-                "Googleスプレッドシートの作成中に予期しないエラーが発生しました",
-                details={"error": str(e)}
+            return WriteResult(
+                success=False,
+                output_path=None,
+                url=None,
+                error=f"Googleスプレッドシートの作成中に予期しないエラーが発生しました: {str(e)}"
             )
 
-    def create_document(self, data: dict[str, Any], title: str) -> str:
+    def create_document(self, data: dict[str, Any], title: str) -> WriteResult:
         """
         Googleドキュメントを作成する。
 
@@ -386,7 +408,9 @@ class GoogleWorkspaceWriter:
                 'title': title
             }
 
-            document = service.documents().create(body=document_body).execute()
+            document = self._execute_with_retry(
+                lambda: service.documents().create(body=document_body).execute()
+            )
             document_id = document['documentId']
             document_url = f"https://docs.google.com/document/d/{document_id}/edit"
 
@@ -464,10 +488,12 @@ class GoogleWorkspaceWriter:
 
                 # リクエストを実行
                 if requests:
-                    service.documents().batchUpdate(
-                        documentId=document_id,
-                        body={'requests': requests}
-                    ).execute()
+                    self._execute_with_retry(
+                        lambda: service.documents().batchUpdate(
+                            documentId=document_id,
+                            body={'requests': requests}
+                        ).execute()
+                    )
 
             # 処理時間を計算
             elapsed_time = time.time() - start_time
@@ -476,35 +502,47 @@ class GoogleWorkspaceWriter:
                 f"(URL: {document_url}, セクション数: {len(sections)}, 処理時間: {elapsed_time:.2f}秒)"
             )
 
-            return document_url
+            # WriteResultを返す
+            return WriteResult(
+                success=True,
+                output_path=None,
+                url=document_url,
+                error=None
+            )
 
         except HttpError as e:
             if e.resp.status == 403:
                 logger.error("Googleドキュメントの作成権限がありません")
-                raise PermissionError(
-                    "Googleドキュメントの作成権限がありません",
-                    details={"error": str(e)}
+                return WriteResult(
+                    success=False,
+                    output_path=None,
+                    url=None,
+                    error="Googleドキュメントの作成権限がありません"
                 )
             else:
                 logger.error(
                     "Googleドキュメントの作成中にエラーが発生",
                     exc_info=True
                 )
-                raise APIError(
-                    "Googleドキュメントの作成中にエラーが発生しました",
-                    details={"status": e.resp.status, "error": str(e)}
+                return WriteResult(
+                    success=False,
+                    output_path=None,
+                    url=None,
+                    error=f"Googleドキュメントの作成中にエラーが発生しました: {str(e)}"
                 )
         except Exception as e:
             logger.error(
                 "Googleドキュメントの作成中に予期しないエラーが発生",
                 exc_info=True
             )
-            raise APIError(
-                "Googleドキュメントの作成中に予期しないエラーが発生しました",
-                details={"error": str(e)}
+            return WriteResult(
+                success=False,
+                output_path=None,
+                url=None,
+                error=f"Googleドキュメントの作成中に予期しないエラーが発生しました: {str(e)}"
             )
 
-    def create_slides(self, data: dict[str, Any], title: str) -> str:
+    def create_slides(self, data: dict[str, Any], title: str) -> WriteResult:
         """
         Googleスライドを作成する。
 
@@ -539,9 +577,11 @@ class GoogleWorkspaceWriter:
                 'title': title
             }
 
-            presentation = service.presentations().create(
-                body=presentation_body
-            ).execute()
+            presentation = self._execute_with_retry(
+                lambda: service.presentations().create(
+                    body=presentation_body
+                ).execute()
+            )
 
             presentation_id = presentation['presentationId']
             presentation_url = f"https://docs.google.com/presentation/d/{presentation_id}/edit"
@@ -561,9 +601,11 @@ class GoogleWorkspaceWriter:
                     slide_content = first_slide.get('content', '')
                     
                     # デフォルトのスライドIDを取得
-                    presentation_info = service.presentations().get(
-                        presentationId=presentation_id
-                    ).execute()
+                    presentation_info = self._execute_with_retry(
+                        lambda: service.presentations().get(
+                            presentationId=presentation_id
+                        ).execute()
+                    )
                     
                     if presentation_info.get('slides'):
                         # タイトルとサブタイトルのプレースホルダーを探す
@@ -627,10 +669,12 @@ class GoogleWorkspaceWriter:
 
                 # リクエストを実行
                 if requests:
-                    service.presentations().batchUpdate(
-                        presentationId=presentation_id,
-                        body={'requests': requests}
-                    ).execute()
+                    self._execute_with_retry(
+                        lambda: service.presentations().batchUpdate(
+                            presentationId=presentation_id,
+                            body={'requests': requests}
+                        ).execute()
+                    )
 
             # 処理時間を計算
             elapsed_time = time.time() - start_time
@@ -639,30 +683,42 @@ class GoogleWorkspaceWriter:
                 f"(URL: {presentation_url}, スライド数: {len(slides_data)}, 処理時間: {elapsed_time:.2f}秒)"
             )
 
-            return presentation_url
+            # WriteResultを返す
+            return WriteResult(
+                success=True,
+                output_path=None,
+                url=presentation_url,
+                error=None
+            )
 
         except HttpError as e:
             if e.resp.status == 403:
                 logger.error("Googleスライドの作成権限がありません")
-                raise PermissionError(
-                    "Googleスライドの作成権限がありません",
-                    details={"error": str(e)}
+                return WriteResult(
+                    success=False,
+                    output_path=None,
+                    url=None,
+                    error="Googleスライドの作成権限がありません"
                 )
             else:
                 logger.error(
                     "Googleスライドの作成中にエラーが発生",
                     exc_info=True
                 )
-                raise APIError(
-                    "Googleスライドの作成中にエラーが発生しました",
-                    details={"status": e.resp.status, "error": str(e)}
+                return WriteResult(
+                    success=False,
+                    output_path=None,
+                    url=None,
+                    error=f"Googleスライドの作成中にエラーが発生しました: {str(e)}"
                 )
         except Exception as e:
             logger.error(
                 "Googleスライドの作成中に予期しないエラーが発生",
                 exc_info=True
             )
-            raise APIError(
-                "Googleスライドの作成中に予期しないエラーが発生しました",
-                details={"error": str(e)}
+            return WriteResult(
+                success=False,
+                output_path=None,
+                url=None,
+                error=f"Googleスライドの作成中に予期しないエラーが発生しました: {str(e)}"
             )

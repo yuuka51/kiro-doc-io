@@ -3,7 +3,6 @@
 import os
 import re
 import time
-from typing import Any
 
 from google.auth.transport.requests import Request
 from google.oauth2.credentials import Credentials
@@ -13,12 +12,11 @@ from googleapiclient.errors import HttpError
 
 from ..utils.errors import (
     AuthenticationError,
-    PermissionError,
     APIError,
-    FileNotFoundError,
     ConfigurationError,
 )
 from ..utils.logging_config import get_logger
+from ..utils.models import ReadResult, DocumentContent
 
 
 # ロガーの取得
@@ -160,14 +158,8 @@ class GoogleWorkspaceReader:
         
         for attempt in range(self.max_retries):
             try:
-                # タイムアウト付きでAPI呼び出しを実行
-                import signal
-                
-                def timeout_handler(signum, frame):
-                    raise TimeoutError(f"API呼び出しがタイムアウトしました（{self.api_timeout}秒）")
-                
-                # Windowsではsignal.SIGALRMが使えないため、別の方法を使用
-                # ここでは簡易的にタイムアウトなしで実行
+                # API呼び出しを実行
+                # 注: Windowsではsignal.SIGALRMが使えないため、タイムアウトは実装していません
                 result = request_func(*args, **kwargs)
                 
                 logger.debug(f"API呼び出しが成功（試行回数: {attempt + 1}）")
@@ -243,7 +235,7 @@ class GoogleWorkspaceReader:
         # パターンにマッチしない場合はそのまま返す（ファイルIDとして扱う）
         return file_id_or_url
 
-    def read_spreadsheet(self, file_id_or_url: str) -> dict[str, Any]:
+    def read_spreadsheet(self, file_id_or_url: str) -> ReadResult:
         """
         Googleスプレッドシートを読み取る。
 
@@ -251,18 +243,7 @@ class GoogleWorkspaceReader:
             file_id_or_url: スプレッドシートのURLまたはファイルID
 
         Returns:
-            抽出されたコンテンツを含む辞書:
-            {
-                "title": str,
-                "sheets": [
-                    {
-                        "name": str,
-                        "data": [[cell_value, ...], ...],
-                        "row_count": int,
-                        "column_count": int
-                    }
-                ]
-            }
+            ReadResult: 読み取り結果を含むデータクラス
 
         Raises:
             FileNotFoundError: ファイルが見つからない場合
@@ -277,9 +258,11 @@ class GoogleWorkspaceReader:
             service = build('sheets', 'v4', credentials=self.credentials)
 
             # スプレッドシートのメタデータを取得
-            spreadsheet = service.spreadsheets().get(
-                spreadsheetId=file_id
-            ).execute()
+            spreadsheet = self._execute_with_retry(
+                lambda: service.spreadsheets().get(
+                    spreadsheetId=file_id
+                ).execute()
+            )
 
             title = spreadsheet.get('properties', {}).get('title', '')
             sheets_data = []
@@ -290,10 +273,12 @@ class GoogleWorkspaceReader:
                 sheet_title = sheet_properties.get('title', '')
 
                 # シートのデータを取得
-                result = service.spreadsheets().values().get(
-                    spreadsheetId=file_id,
-                    range=sheet_title
-                ).execute()
+                result = self._execute_with_retry(
+                    lambda st=sheet_title: service.spreadsheets().values().get(
+                        spreadsheetId=file_id,
+                        range=st
+                    ).execute()
+                )
 
                 values = result.get('values', [])
 
@@ -305,10 +290,24 @@ class GoogleWorkspaceReader:
                 }
                 sheets_data.append(sheet_data)
 
-            result = {
+            content_dict = {
                 "title": title,
                 "sheets": sheets_data
             }
+            
+            # メタデータを作成
+            metadata = {
+                "title": title,
+                "sheet_count": len(sheets_data),
+                "file_id": file_id
+            }
+            
+            # DocumentContentを作成
+            document_content = DocumentContent(
+                format_type="google_sheets",
+                metadata=metadata,
+                content=content_dict
+            )
             
             # 処理時間を計算
             elapsed_time = time.time() - start_time
@@ -318,41 +317,55 @@ class GoogleWorkspaceReader:
             )
             logger.debug(f"抽出されたデータの概要: シート数={len(sheets_data)}")
             
-            return result
+            # ReadResultを返す
+            return ReadResult(
+                success=True,
+                content=document_content,
+                error=None,
+                file_path=file_id
+            )
 
         except HttpError as e:
             if e.resp.status == 404:
                 logger.error(f"Googleスプレッドシートが見つかりません: {file_id}")
-                raise FileNotFoundError(
-                    f"指定されたGoogleスプレッドシートが見つかりません: {file_id}",
-                    details={"file_id": file_id, "error": str(e)}
+                return ReadResult(
+                    success=False,
+                    content=None,
+                    error=f"指定されたGoogleスプレッドシートが見つかりません: {file_id}",
+                    file_path=file_id
                 )
             elif e.resp.status == 403:
                 logger.error(f"Googleスプレッドシートへのアクセス権限がありません: {file_id}")
-                raise PermissionError(
-                    f"Googleスプレッドシートへのアクセス権限がありません: {file_id}",
-                    details={"file_id": file_id, "error": str(e)}
+                return ReadResult(
+                    success=False,
+                    content=None,
+                    error=f"Googleスプレッドシートへのアクセス権限がありません: {file_id}",
+                    file_path=file_id
                 )
             else:
                 logger.error(
                     f"Googleスプレッドシートの読み取り中にエラーが発生: {file_id}",
                     exc_info=True
                 )
-                raise APIError(
-                    f"Googleスプレッドシートの読み取り中にエラーが発生しました: {file_id}",
-                    details={"file_id": file_id, "status": e.resp.status, "error": str(e)}
+                return ReadResult(
+                    success=False,
+                    content=None,
+                    error=f"Googleスプレッドシートの読み取り中にエラーが発生しました: {str(e)}",
+                    file_path=file_id
                 )
         except Exception as e:
             logger.error(
                 f"Googleスプレッドシートの読み取り中に予期しないエラーが発生: {file_id}",
                 exc_info=True
             )
-            raise APIError(
-                f"Googleスプレッドシートの読み取り中に予期しないエラーが発生しました: {file_id}",
-                details={"file_id": file_id, "error": str(e)}
+            return ReadResult(
+                success=False,
+                content=None,
+                error=f"Googleスプレッドシートの読み取り中に予期しないエラーが発生しました: {str(e)}",
+                file_path=file_id
             )
 
-    def read_document(self, file_id_or_url: str) -> dict[str, Any]:
+    def read_document(self, file_id_or_url: str) -> ReadResult:
         """
         Googleドキュメントを読み取る。
 
@@ -360,18 +373,7 @@ class GoogleWorkspaceReader:
             file_id_or_url: ドキュメントのURLまたはファイルID
 
         Returns:
-            抽出されたコンテンツを含む辞書:
-            {
-                "title": str,
-                "content": [
-                    {
-                        "type": "paragraph" | "heading" | "table",
-                        "text": str,
-                        "style": str,
-                        "level": int  # 見出しの場合
-                    }
-                ]
-            }
+            ReadResult: 読み取り結果を含むデータクラス
 
         Raises:
             FileNotFoundError: ファイルが見つからない場合
@@ -386,7 +388,9 @@ class GoogleWorkspaceReader:
             service = build('docs', 'v1', credentials=self.credentials)
 
             # ドキュメントを取得
-            document = service.documents().get(documentId=file_id).execute()
+            document = self._execute_with_retry(
+                lambda: service.documents().get(documentId=file_id).execute()
+            )
 
             title = document.get('title', '')
             content_data = []
@@ -444,10 +448,24 @@ class GoogleWorkspaceReader:
                         "columns": max(len(row) for row in table_data) if table_data else 0
                     })
 
-            result = {
+            content_dict = {
                 "title": title,
                 "content": content_data
             }
+            
+            # メタデータを作成
+            metadata = {
+                "title": title,
+                "content_count": len(content_data),
+                "file_id": file_id
+            }
+            
+            # DocumentContentを作成
+            document_content = DocumentContent(
+                format_type="google_docs",
+                metadata=metadata,
+                content=content_dict
+            )
             
             # 処理時間を計算
             elapsed_time = time.time() - start_time
@@ -457,41 +475,55 @@ class GoogleWorkspaceReader:
             )
             logger.debug(f"抽出されたデータの概要: コンテンツ数={len(content_data)}")
             
-            return result
+            # ReadResultを返す
+            return ReadResult(
+                success=True,
+                content=document_content,
+                error=None,
+                file_path=file_id
+            )
 
         except HttpError as e:
             if e.resp.status == 404:
                 logger.error(f"Googleドキュメントが見つかりません: {file_id}")
-                raise FileNotFoundError(
-                    f"指定されたGoogleドキュメントが見つかりません: {file_id}",
-                    details={"file_id": file_id, "error": str(e)}
+                return ReadResult(
+                    success=False,
+                    content=None,
+                    error=f"指定されたGoogleドキュメントが見つかりません: {file_id}",
+                    file_path=file_id
                 )
             elif e.resp.status == 403:
                 logger.error(f"Googleドキュメントへのアクセス権限がありません: {file_id}")
-                raise PermissionError(
-                    f"Googleドキュメントへのアクセス権限がありません: {file_id}",
-                    details={"file_id": file_id, "error": str(e)}
+                return ReadResult(
+                    success=False,
+                    content=None,
+                    error=f"Googleドキュメントへのアクセス権限がありません: {file_id}",
+                    file_path=file_id
                 )
             else:
                 logger.error(
                     f"Googleドキュメントの読み取り中にエラーが発生: {file_id}",
                     exc_info=True
                 )
-                raise APIError(
-                    f"Googleドキュメントの読み取り中にエラーが発生しました: {file_id}",
-                    details={"file_id": file_id, "status": e.resp.status, "error": str(e)}
+                return ReadResult(
+                    success=False,
+                    content=None,
+                    error=f"Googleドキュメントの読み取り中にエラーが発生しました: {str(e)}",
+                    file_path=file_id
                 )
         except Exception as e:
             logger.error(
                 f"Googleドキュメントの読み取り中に予期しないエラーが発生: {file_id}",
                 exc_info=True
             )
-            raise APIError(
-                f"Googleドキュメントの読み取り中に予期しないエラーが発生しました: {file_id}",
-                details={"file_id": file_id, "error": str(e)}
+            return ReadResult(
+                success=False,
+                content=None,
+                error=f"Googleドキュメントの読み取り中に予期しないエラーが発生しました: {str(e)}",
+                file_path=file_id
             )
 
-    def read_slides(self, file_id_or_url: str) -> dict[str, Any]:
+    def read_slides(self, file_id_or_url: str) -> ReadResult:
         """
         Googleスライドを読み取る。
 
@@ -499,21 +531,7 @@ class GoogleWorkspaceReader:
             file_id_or_url: スライドのURLまたはファイルID
 
         Returns:
-            抽出されたコンテンツを含む辞書:
-            {
-                "title": str,
-                "slides": [
-                    {
-                        "slide_number": int,
-                        "elements": [
-                            {
-                                "type": "text" | "table" | "image",
-                                "content": str | dict
-                            }
-                        ]
-                    }
-                ]
-            }
+            ReadResult: 読み取り結果を含むデータクラス
 
         Raises:
             FileNotFoundError: ファイルが見つからない場合
@@ -528,9 +546,11 @@ class GoogleWorkspaceReader:
             service = build('slides', 'v1', credentials=self.credentials)
 
             # プレゼンテーションを取得
-            presentation = service.presentations().get(
-                presentationId=file_id
-            ).execute()
+            presentation = self._execute_with_retry(
+                lambda: service.presentations().get(
+                    presentationId=file_id
+                ).execute()
+            )
 
             title = presentation.get('title', '')
             slides_data = []
@@ -597,10 +617,24 @@ class GoogleWorkspaceReader:
                     "elements": slide_elements
                 })
 
-            result = {
+            content_dict = {
                 "title": title,
                 "slides": slides_data
             }
+            
+            # メタデータを作成
+            metadata = {
+                "title": title,
+                "slide_count": len(slides_data),
+                "file_id": file_id
+            }
+            
+            # DocumentContentを作成
+            document_content = DocumentContent(
+                format_type="google_slides",
+                metadata=metadata,
+                content=content_dict
+            )
             
             # 処理時間を計算
             elapsed_time = time.time() - start_time
@@ -610,36 +644,50 @@ class GoogleWorkspaceReader:
             )
             logger.debug(f"抽出されたデータの概要: スライド数={len(slides_data)}")
             
-            return result
+            # ReadResultを返す
+            return ReadResult(
+                success=True,
+                content=document_content,
+                error=None,
+                file_path=file_id
+            )
 
         except HttpError as e:
             if e.resp.status == 404:
                 logger.error(f"Googleスライドが見つかりません: {file_id}")
-                raise FileNotFoundError(
-                    f"指定されたGoogleスライドが見つかりません: {file_id}",
-                    details={"file_id": file_id, "error": str(e)}
+                return ReadResult(
+                    success=False,
+                    content=None,
+                    error=f"指定されたGoogleスライドが見つかりません: {file_id}",
+                    file_path=file_id
                 )
             elif e.resp.status == 403:
                 logger.error(f"Googleスライドへのアクセス権限がありません: {file_id}")
-                raise PermissionError(
-                    f"Googleスライドへのアクセス権限がありません: {file_id}",
-                    details={"file_id": file_id, "error": str(e)}
+                return ReadResult(
+                    success=False,
+                    content=None,
+                    error=f"Googleスライドへのアクセス権限がありません: {file_id}",
+                    file_path=file_id
                 )
             else:
                 logger.error(
                     f"Googleスライドの読み取り中にエラーが発生: {file_id}",
                     exc_info=True
                 )
-                raise APIError(
-                    f"Googleスライドの読み取り中にエラーが発生しました: {file_id}",
-                    details={"file_id": file_id, "status": e.resp.status, "error": str(e)}
+                return ReadResult(
+                    success=False,
+                    content=None,
+                    error=f"Googleスライドの読み取り中にエラーが発生しました: {str(e)}",
+                    file_path=file_id
                 )
         except Exception as e:
             logger.error(
                 f"Googleスライドの読み取り中に予期しないエラーが発生: {file_id}",
                 exc_info=True
             )
-            raise APIError(
-                f"Googleスライドの読み取り中に予期しないエラーが発生しました: {file_id}",
-                details={"file_id": file_id, "error": str(e)}
+            return ReadResult(
+                success=False,
+                content=None,
+                error=f"Googleスライドの読み取り中に予期しないエラーが発生しました: {str(e)}",
+                file_path=file_id
             )

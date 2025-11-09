@@ -9,6 +9,7 @@ from docx.opc.exceptions import PackageNotFoundError
 
 from ..utils.errors import FileNotFoundError, CorruptedFileError
 from ..utils.logging_config import get_logger
+from ..utils.models import ReadResult, DocumentContent
 
 
 # ロガーの取得
@@ -27,7 +28,7 @@ class WordReader:
         """
         self.max_file_size_mb = max_file_size_mb
 
-    def read_file(self, file_path: str) -> dict[str, Any]:
+    def read_file(self, file_path: str) -> ReadResult:
         """
         Wordファイルからコンテンツを抽出する。
 
@@ -35,17 +36,7 @@ class WordReader:
             file_path: 読み取るWordファイルのパス
 
         Returns:
-            抽出されたコンテンツを含む辞書:
-            {
-                "paragraphs": [
-                    {
-                        "text": str,
-                        "style": str,  # "Heading 1", "Normal", etc.
-                        "level": int
-                    }
-                ],
-                "tables": [...]
-            }
+            ReadResult: 読み取り結果を含むデータクラス
 
         Raises:
             FileNotFoundError: ファイルが存在しない場合
@@ -100,10 +91,24 @@ class WordReader:
                 table_data = self._extract_table(table)
                 tables_data.append(table_data)
             
-            result = {
+            content_dict = {
                 "paragraphs": paragraphs_data,
                 "tables": tables_data
             }
+            
+            # メタデータを作成
+            metadata = {
+                "paragraph_count": len(paragraphs_data),
+                "table_count": len(tables_data),
+                "file_size_mb": file_size_mb
+            }
+            
+            # DocumentContentを作成
+            document_content = DocumentContent(
+                format_type="docx",
+                metadata=metadata,
+                content=content_dict
+            )
             
             # 処理時間を計算
             elapsed_time = time.time() - start_time
@@ -115,16 +120,33 @@ class WordReader:
                 f"抽出されたデータの概要: 段落数={len(paragraphs_data)}, 表数={len(tables_data)}"
             )
             
-            return result
+            # ReadResultを返す
+            return ReadResult(
+                success=True,
+                content=document_content,
+                error=None,
+                file_path=file_path
+            )
         
+        except (FileNotFoundError, CorruptedFileError) as e:
+            # 既知のエラーはReadResultとして返す
+            logger.error(f"Wordファイルの読み込みエラー: {file_path}", exc_info=True)
+            return ReadResult(
+                success=False,
+                content=None,
+                error=str(e),
+                file_path=file_path
+            )
         except PackageNotFoundError as e:
             logger.error(
                 f"Wordファイルが破損しています: {file_path}",
                 exc_info=True
             )
-            raise CorruptedFileError(
-                f"Wordファイルが破損しているか、読み取り不可能です: {file_path}",
-                details={"file_path": file_path, "error": str(e)}
+            return ReadResult(
+                success=False,
+                content=None,
+                error=f"Wordファイルが破損しているか、読み取り不可能です: {file_path}",
+                file_path=file_path
             )
         except Exception as e:
             # その他の予期しないエラー
@@ -132,9 +154,11 @@ class WordReader:
                 f"Wordファイルの読み取り中にエラーが発生: {file_path}",
                 exc_info=True
             )
-            raise CorruptedFileError(
-                f"Wordファイルの読み取り中にエラーが発生しました: {file_path}",
-                details={"file_path": file_path, "error": str(e)}
+            return ReadResult(
+                success=False,
+                content=None,
+                error=f"Wordファイルの読み取り中にエラーが発生しました: {str(e)}",
+                file_path=file_path
             )
 
     def _get_heading_level(self, style_name: str) -> int:

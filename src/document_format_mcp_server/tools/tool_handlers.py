@@ -1,6 +1,5 @@
 """Tool handlers for MCP document format tools."""
 
-import json
 from pathlib import Path
 from typing import Any
 
@@ -89,10 +88,18 @@ class ToolHandlers:
             # パラメータ検証
             file_path = self._validate_file_path(arguments, "file_path")
             
-            # ファイル読み取り
-            result = self.powerpoint_reader.read_file(file_path)
+            # ファイル読み取り（ReadResultを返す）
+            read_result = self.powerpoint_reader.read_file(file_path)
             
-            return self._success_response(result)
+            # ReadResultを処理
+            if read_result.success:
+                # 成功時はcontentを返す
+                return self._success_response(read_result.content.content)
+            else:
+                # 失敗時はエラーを返す
+                return self._error_response(
+                    DocumentMCPError(read_result.error)
+                )
         
         except DocumentMCPError as e:
             return self._error_response(e)
@@ -115,10 +122,18 @@ class ToolHandlers:
             # パラメータ検証
             file_path = self._validate_file_path(arguments, "file_path")
             
-            # ファイル読み取り
-            result = self.word_reader.read_file(file_path)
+            # ファイル読み取り（ReadResultを返す）
+            read_result = self.word_reader.read_file(file_path)
             
-            return self._success_response(result)
+            # ReadResultを処理
+            if read_result.success:
+                # 成功時はcontentを返す
+                return self._success_response(read_result.content.content)
+            else:
+                # 失敗時はエラーを返す
+                return self._error_response(
+                    DocumentMCPError(read_result.error)
+                )
         
         except DocumentMCPError as e:
             return self._error_response(e)
@@ -141,10 +156,18 @@ class ToolHandlers:
             # パラメータ検証
             file_path = self._validate_file_path(arguments, "file_path")
             
-            # ファイル読み取り
-            result = self.excel_reader.read_file(file_path)
+            # ファイル読み取り（ReadResultを返す）
+            read_result = self.excel_reader.read_file(file_path)
             
-            return self._success_response(result)
+            # ReadResultを処理
+            if read_result.success:
+                # 成功時はcontentを返す
+                return self._success_response(read_result.content.content)
+            else:
+                # 失敗時はエラーを返す
+                return self._error_response(
+                    DocumentMCPError(read_result.error)
+                )
         
         except DocumentMCPError as e:
             return self._error_response(e)
@@ -176,10 +199,18 @@ class ToolHandlers:
             # パラメータ検証
             file_id = self._validate_string_param(arguments, "file_id")
             
-            # ファイル読み取り
-            result = self.google_reader.read_spreadsheet(file_id)
+            # ファイル読み取り（ReadResultを返す）
+            read_result = self.google_reader.read_spreadsheet(file_id)
             
-            return self._success_response(result)
+            # ReadResultを処理
+            if read_result.success:
+                # 成功時はcontentを返す
+                return self._success_response(read_result.content.content)
+            else:
+                # 失敗時はエラーを返す
+                return self._error_response(
+                    DocumentMCPError(read_result.error)
+                )
         
         except DocumentMCPError as e:
             return self._error_response(e)
@@ -211,10 +242,18 @@ class ToolHandlers:
             # パラメータ検証
             file_id = self._validate_string_param(arguments, "file_id")
             
-            # ファイル読み取り
-            result = self.google_reader.read_document(file_id)
+            # ファイル読み取り（ReadResultを返す）
+            read_result = self.google_reader.read_document(file_id)
             
-            return self._success_response(result)
+            # ReadResultを処理
+            if read_result.success:
+                # 成功時はcontentを返す
+                return self._success_response(read_result.content.content)
+            else:
+                # 失敗時はエラーを返す
+                return self._error_response(
+                    DocumentMCPError(read_result.error)
+                )
         
         except DocumentMCPError as e:
             return self._error_response(e)
@@ -246,10 +285,18 @@ class ToolHandlers:
             # パラメータ検証
             file_id = self._validate_string_param(arguments, "file_id")
             
-            # ファイル読み取り
-            result = self.google_reader.read_slides(file_id)
+            # ファイル読み取り（ReadResultを返す）
+            read_result = self.google_reader.read_slides(file_id)
             
-            return self._success_response(result)
+            # ReadResultを処理
+            if read_result.success:
+                # 成功時はcontentを返す
+                return self._success_response(read_result.content.content)
+            else:
+                # 失敗時はエラーを返す
+                return self._error_response(
+                    DocumentMCPError(read_result.error)
+                )
         
         except DocumentMCPError as e:
             return self._error_response(e)
@@ -287,16 +334,21 @@ class ToolHandlers:
             data = arguments["data"]
             output_path = arguments["output_path"]
             
-            # ファイル生成
-            result_path = self.powerpoint_writer.create_presentation(data, output_path)
+            # ファイル生成（WriteResultを返す）
+            write_result = self.powerpoint_writer.create_presentation(data, output_path)
             
-            result = {
-                "success": True,
-                "output_path": result_path,
-                "message": f"PowerPointファイルを生成しました: {result_path}"
-            }
-            
-            return self._success_response(result)
+            # WriteResultを処理
+            if write_result.success:
+                result = {
+                    "success": True,
+                    "output_path": write_result.output_path,
+                    "message": f"PowerPointファイルを生成しました: {write_result.output_path}"
+                }
+                return self._success_response(result)
+            else:
+                return self._error_response(
+                    DocumentMCPError(write_result.error)
+                )
         
         except DocumentMCPError as e:
             return self._error_response(e)
@@ -332,16 +384,21 @@ class ToolHandlers:
             data = arguments["data"]
             output_path = arguments["output_path"]
             
-            # ファイル生成
-            result_path = self.word_writer.create_document(data, output_path)
+            # ファイル生成（WriteResultを返す）
+            write_result = self.word_writer.create_document(data, output_path)
             
-            result = {
-                "success": True,
-                "output_path": result_path,
-                "message": f"Wordファイルを生成しました: {result_path}"
-            }
-            
-            return self._success_response(result)
+            # WriteResultを処理
+            if write_result.success:
+                result = {
+                    "success": True,
+                    "output_path": write_result.output_path,
+                    "message": f"Wordファイルを生成しました: {write_result.output_path}"
+                }
+                return self._success_response(result)
+            else:
+                return self._error_response(
+                    DocumentMCPError(write_result.error)
+                )
         
         except DocumentMCPError as e:
             return self._error_response(e)
@@ -377,16 +434,21 @@ class ToolHandlers:
             data = arguments["data"]
             output_path = arguments["output_path"]
             
-            # ファイル生成
-            result_path = self.excel_writer.create_workbook(data, output_path)
+            # ファイル生成（WriteResultを返す）
+            write_result = self.excel_writer.create_workbook(data, output_path)
             
-            result = {
-                "success": True,
-                "output_path": result_path,
-                "message": f"Excelファイルを生成しました: {result_path}"
-            }
-            
-            return self._success_response(result)
+            # WriteResultを処理
+            if write_result.success:
+                result = {
+                    "success": True,
+                    "output_path": write_result.output_path,
+                    "message": f"Excelファイルを生成しました: {write_result.output_path}"
+                }
+                return self._success_response(result)
+            else:
+                return self._error_response(
+                    DocumentMCPError(write_result.error)
+                )
         
         except DocumentMCPError as e:
             return self._error_response(e)
@@ -431,16 +493,21 @@ class ToolHandlers:
             data = arguments["data"]
             title = arguments["title"]
             
-            # ファイル生成
-            result_url = self.google_writer.create_spreadsheet(data, title)
+            # ファイル生成（WriteResultを返す）
+            write_result = self.google_writer.create_spreadsheet(data, title)
             
-            result = {
-                "success": True,
-                "url": result_url,
-                "message": f"Googleスプレッドシートを生成しました: {result_url}"
-            }
-            
-            return self._success_response(result)
+            # WriteResultを処理
+            if write_result.success:
+                result = {
+                    "success": True,
+                    "url": write_result.url,
+                    "message": f"Googleスプレッドシートを生成しました: {write_result.url}"
+                }
+                return self._success_response(result)
+            else:
+                return self._error_response(
+                    DocumentMCPError(write_result.error)
+                )
         
         except DocumentMCPError as e:
             return self._error_response(e)
@@ -485,16 +552,21 @@ class ToolHandlers:
             data = arguments["data"]
             title = arguments["title"]
             
-            # ファイル生成
-            result_url = self.google_writer.create_document(data, title)
+            # ファイル生成（WriteResultを返す）
+            write_result = self.google_writer.create_document(data, title)
             
-            result = {
-                "success": True,
-                "url": result_url,
-                "message": f"Googleドキュメントを生成しました: {result_url}"
-            }
-            
-            return self._success_response(result)
+            # WriteResultを処理
+            if write_result.success:
+                result = {
+                    "success": True,
+                    "url": write_result.url,
+                    "message": f"Googleドキュメントを生成しました: {write_result.url}"
+                }
+                return self._success_response(result)
+            else:
+                return self._error_response(
+                    DocumentMCPError(write_result.error)
+                )
         
         except DocumentMCPError as e:
             return self._error_response(e)
@@ -539,16 +611,21 @@ class ToolHandlers:
             data = arguments["data"]
             title = arguments["title"]
             
-            # ファイル生成
-            result_url = self.google_writer.create_slides(data, title)
+            # ファイル生成（WriteResultを返す）
+            write_result = self.google_writer.create_slides(data, title)
             
-            result = {
-                "success": True,
-                "url": result_url,
-                "message": f"Googleスライドを生成しました: {result_url}"
-            }
-            
-            return self._success_response(result)
+            # WriteResultを処理
+            if write_result.success:
+                result = {
+                    "success": True,
+                    "url": write_result.url,
+                    "message": f"Googleスライドを生成しました: {write_result.url}"
+                }
+                return self._success_response(result)
+            else:
+                return self._error_response(
+                    DocumentMCPError(write_result.error)
+                )
         
         except DocumentMCPError as e:
             return self._error_response(e)
@@ -654,13 +731,13 @@ class ToolHandlers:
             content: レスポンスコンテンツ
             
         Returns:
-            成功レスポンス
+            成功レスポンス（ネイティブJSON構造）
         """
         return {
             "content": [
                 {
                     "type": "text",
-                    "text": json.dumps(content, ensure_ascii=False, indent=2)
+                    "text": content
                 }
             ]
         }
@@ -673,7 +750,7 @@ class ToolHandlers:
             error: エラーオブジェクト
             
         Returns:
-            エラーレスポンス
+            エラーレスポンス（ネイティブJSON構造）
         """
         error_data = {
             "success": False,
@@ -688,7 +765,7 @@ class ToolHandlers:
             "content": [
                 {
                     "type": "text",
-                    "text": json.dumps(error_data, ensure_ascii=False, indent=2)
+                    "text": error_data
                 }
             ],
             "isError": True
