@@ -1,6 +1,7 @@
 """Excel (.xlsx) file writer."""
 
 import os
+import re
 import time
 from typing import Any
 
@@ -15,6 +16,51 @@ from ..utils.models import WriteResult
 
 # ロガーの取得
 logger = get_logger(__name__)
+
+
+def _sanitize_text(text: str) -> str:
+    """
+    XMLに互換性のない制御文字を除去する。
+    
+    Args:
+        text: サニタイズする文字列
+        
+    Returns:
+        制御文字を除去した文字列
+    """
+    if not isinstance(text, str):
+        return str(text) if text is not None else ""
+    # XML 1.0で許可されていない制御文字を除去（タブ、改行、キャリッジリターンは許可）
+    # 許可: \x09 (tab), \x0A (newline), \x0D (carriage return)
+    # 除去: \x00-\x08, \x0B, \x0C, \x0E-\x1F
+    return re.sub(r'[\x00-\x08\x0B\x0C\x0E-\x1F]', '', text)
+
+
+def _sanitize_sheet_name(name: str) -> str:
+    """
+    シート名をサニタイズする。
+    
+    Args:
+        name: サニタイズするシート名
+        
+    Returns:
+        サニタイズされたシート名
+    """
+    if not isinstance(name, str):
+        name = str(name) if name is not None else "Sheet"
+    
+    # 制御文字を除去
+    name = re.sub(r'[\x00-\x1F]', '', name)
+    
+    # Excelで禁止されている文字を除去: \ / * ? : [ ]
+    name = re.sub(r'[\\/*?:\[\]]', '', name)
+    
+    # 空になった場合はデフォルト名を使用
+    if not name.strip():
+        name = "Sheet"
+    
+    # 最大31文字に制限
+    return name[:31]
 
 
 class ExcelWriter:
@@ -187,12 +233,15 @@ class ExcelWriter:
         data = sheet_data.get("data", [])
         formatting = sheet_data.get("formatting", {})
 
+        # シート名をサニタイズ
+        sanitized_sheet_name = _sanitize_sheet_name(sheet_name)
+        
         # シートを作成
-        ws = wb.create_sheet(title=sheet_name)
-        logger.debug(f"シートを作成: {sheet_name}")
+        ws = wb.create_sheet(title=sanitized_sheet_name)
+        logger.debug(f"シートを作成: {sanitized_sheet_name}")
 
         if not data:
-            logger.debug(f"シート '{sheet_name}' にデータがありません")
+            logger.debug(f"シート '{sanitized_sheet_name}' にデータがありません")
             return
 
         # データを書き込む
@@ -202,7 +251,11 @@ class ExcelWriter:
 
             for col_idx, cell_value in enumerate(row_data, start=1):
                 cell = ws.cell(row=row_idx, column=col_idx)
-                cell.value = cell_value
+                # セル値をサニタイズ
+                if isinstance(cell_value, str):
+                    cell.value = _sanitize_text(cell_value)
+                else:
+                    cell.value = cell_value
 
         # フォーマットを適用
         header_row = formatting.get("header_row", True)
@@ -217,7 +270,7 @@ class ExcelWriter:
             self._auto_adjust_column_width(ws)
 
         logger.debug(
-            f"シート '{sheet_name}' にデータを書き込み: "
+            f"シート '{sanitized_sheet_name}' にデータを書き込み: "
             f"{len(data)}行 x {len(data[0]) if data else 0}列"
         )
 

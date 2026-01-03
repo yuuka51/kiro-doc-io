@@ -81,3 +81,7 @@ Thumbs.db
 # Build artifacts
 *.whl
 *.tar.gz
+
+# AppImage related
+*.appimage
+squashfs-root/

@@ -47,30 +47,29 @@ class PowerPointReader:
         logger.info(f"PowerPointファイルの読み込みを開始: {file_path}")
         start_time = time.time()
         
-        # ファイルの存在確認
-        if not os.path.exists(file_path):
-            logger.error(f"ファイルが見つかりません: {file_path}")
-            raise FileNotFoundError(
-                f"指定されたファイルが見つかりません: {file_path}",
-                details={"file_path": file_path}
-            )
-        
-        # ファイルサイズの検証
-        file_size_mb = os.path.getsize(file_path) / (1024 * 1024)
-        if file_size_mb > self.max_file_size_mb:
-            logger.error(
-                f"ファイルサイズが制限を超えています: {file_size_mb:.2f}MB > {self.max_file_size_mb}MB"
-            )
-            raise CorruptedFileError(
-                f"ファイルサイズが制限を超えています: {file_size_mb:.2f}MB（最大: {self.max_file_size_mb}MB）",
-                details={
-                    "file_path": file_path,
-                    "file_size_mb": file_size_mb,
-                    "max_file_size_mb": self.max_file_size_mb
-                }
-            )
-
         try:
+            # ファイルの存在確認
+            if not os.path.exists(file_path):
+                logger.error(f"ファイルが見つかりません: {file_path}")
+                raise FileNotFoundError(
+                    f"指定されたファイルが見つかりません: {file_path}",
+                    details={"file_path": file_path}
+                )
+            
+            # ファイルサイズの検証
+            file_size_mb = os.path.getsize(file_path) / (1024 * 1024)
+            if file_size_mb > self.max_file_size_mb:
+                logger.error(
+                    f"ファイルサイズが制限を超えています: {file_size_mb:.2f}MB > {self.max_file_size_mb}MB"
+                )
+                raise CorruptedFileError(
+                    f"ファイルサイズが制限を超えています: {file_size_mb:.2f}MB（最大: {self.max_file_size_mb}MB）",
+                    details={
+                        "file_path": file_path,
+                        "file_size_mb": file_size_mb,
+                        "max_file_size_mb": self.max_file_size_mb
+                    }
+                )
             # PowerPointファイルを開く
             prs = Presentation(file_path)
             

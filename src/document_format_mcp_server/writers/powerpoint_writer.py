@@ -5,6 +5,7 @@ import time
 from typing import Any
 
 from pptx import Presentation
+from typing import Any
 
 from ..utils.errors import ValidationError
 from ..utils.logging_config import get_logger
@@ -169,7 +170,7 @@ class PowerPointWriter:
         else:  # content
             self._create_content_slide(prs, title, content)
 
-    def _create_title_slide(self, prs: Presentation, title: str, subtitle: str) -> None:
+    def _create_title_slide(self, prs: Presentation, title: str, subtitle: Any) -> None:
         """タイトルスライドを作成する。"""
         # タイトルスライドレイアウト（通常は0番目）
         slide_layout = prs.slide_layouts[0]
@@ -177,11 +178,16 @@ class PowerPointWriter:
 
         # タイトルとサブタイトルを設定
         if slide.shapes.title:
-            slide.shapes.title.text = title
+            slide.shapes.title.text = str(title) if title else ""
 
         # サブタイトルを設定（プレースホルダーが存在する場合）
         if len(slide.placeholders) > 1:
-            slide.placeholders[1].text = subtitle
+            # subtitleがリストの場合は改行で結合
+            if isinstance(subtitle, list):
+                subtitle_text = "\n".join(str(item) for item in subtitle)
+            else:
+                subtitle_text = str(subtitle) if subtitle else ""
+            slide.placeholders[1].text = subtitle_text
 
         logger.debug(f"タイトルスライドを作成: {title}")
 

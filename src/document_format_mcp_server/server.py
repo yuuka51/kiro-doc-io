@@ -90,12 +90,17 @@ class DocumentMCPServer:
                 # ハンドラーを呼び出し
                 result = await handler(arguments)
                 logger.info(f"ツール呼び出しが完了: {name}")
+                logger.debug(f"レスポンス: {result}")
                 
-                # レスポンスを返す
-                if "content" in result:
-                    return result["content"]
-                else:
-                    return [result]
+                # レスポンスをMCP形式でラップして返す
+                # ハンドラーは既に{"success": true/false, ...}形式を返しているので、
+                # それをMCPの{"type": "text", "text": ...}形式でラップする
+                return [
+                    {
+                        "type": "text",
+                        "text": result
+                    }
+                ]
             
             except Exception as e:
                 logger.error(f"ツール呼び出し中にエラーが発生: {name}", exc_info=True)

@@ -1,6 +1,7 @@
 """Word (.docx) file writer."""
 
 import os
+import re
 import time
 from typing import Any
 
@@ -14,6 +15,24 @@ from ..utils.models import WriteResult
 
 # ロガーの取得
 logger = get_logger(__name__)
+
+
+def _sanitize_text(text: str) -> str:
+    """
+    XMLに互換性のない制御文字を除去する。
+    
+    Args:
+        text: サニタイズする文字列
+        
+    Returns:
+        制御文字を除去した文字列
+    """
+    if not isinstance(text, str):
+        return str(text) if text is not None else ""
+    # XML 1.0で許可されていない制御文字を除去（タブ、改行、キャリッジリターンは許可）
+    # 許可: \x09 (tab), \x0A (newline), \x0D (carriage return)
+    # 除去: \x00-\x08, \x0B, \x0C, \x0E-\x1F
+    return re.sub(r'[\x00-\x08\x0B\x0C\x0E-\x1F]', '', text)
 
 
 class WordWriter:
@@ -62,7 +81,9 @@ class WordWriter:
 
             # タイトルを追加（存在する場合）
             if "title" in data and data["title"]:
-                title = doc.add_heading(data["title"], level=0)
+                # 制御文字をサニタイズ
+                sanitized_title = _sanitize_text(data["title"])
+                title = doc.add_heading(sanitized_title, level=0)
                 title.alignment = WD_ALIGN_PARAGRAPH.CENTER
 
             # セクションを作成
@@ -176,21 +197,27 @@ class WordWriter:
         heading = section_data.get("heading", "")
         level = section_data.get("level", 1)
         if heading:
-            doc.add_heading(heading, level=level)
-            logger.debug(f"見出しを追加: {heading} (レベル: {level})")
+            # 制御文字をサニタイズ
+            sanitized_heading = _sanitize_text(heading)
+            doc.add_heading(sanitized_heading, level=level)
+            logger.debug(f"見出しを追加: {sanitized_heading} (レベル: {level})")
 
         # 段落を追加
         paragraphs = section_data.get("paragraphs", [])
         for paragraph_text in paragraphs:
             if paragraph_text:
-                doc.add_paragraph(str(paragraph_text))
+                # 制御文字をサニタイズ
+                sanitized_text = _sanitize_text(str(paragraph_text))
+                doc.add_paragraph(sanitized_text)
 
         # 箇条書きリストを追加
         bullets = section_data.get("bullets", [])
         if bullets:
             for bullet_text in bullets:
                 if bullet_text:
-                    doc.add_paragraph(str(bullet_text), style='List Bullet')
+                    # 制御文字をサニタイズ
+                    sanitized_text = _sanitize_text(str(bullet_text))
+                    doc.add_paragraph(sanitized_text, style='List Bullet')
             logger.debug(f"箇条書きリストを追加: {len(bullets)}項目")
 
         # 表を追加
@@ -224,6 +251,8 @@ class WordWriter:
             for col_idx, cell_value in enumerate(row_data):
                 if col_idx < cols:
                     cell = table.rows[row_idx].cells[col_idx]
-                    cell.text = str(cell_value) if cell_value is not None else ""
+                    # 制御文字をサニタイズ
+                    sanitized_value = _sanitize_text(str(cell_value) if cell_value is not None else "")
+                    cell.text = sanitized_value
 
         logger.debug(f"表を追加: {rows}行 x {cols}列")

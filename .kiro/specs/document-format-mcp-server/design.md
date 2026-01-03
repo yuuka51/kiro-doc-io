@@ -361,6 +361,73 @@ MCPツールとして公開される機能：
 - `write_google_document`: Googleドキュメントを生成する
 - `write_google_slides`: Googleスライドを生成する
 
+#### ツールハンドラー (`tools/tool_handlers.py`)
+
+```python
+class ToolHandlers:
+    """Handle MCP tool calls and coordinate with readers/writers"""
+    
+    def __init__(self, config: dict):
+        """
+        Initialize tool handlers with configuration
+        
+        Args:
+            config: Configuration dictionary with limits and settings
+        """
+        # リーダーを設定値で初期化
+        self.powerpoint_reader = PowerPointReader(
+            max_slides=config.get('max_slides', 500),
+            max_file_size_mb=config.get('max_file_size_mb', 100)
+        )
+        self.word_reader = WordReader(
+            max_file_size_mb=config.get('max_file_size_mb', 100)
+        )
+        self.excel_reader = ExcelReader(
+            max_sheets=config.get('max_sheets', 100),
+            max_file_size_mb=config.get('max_file_size_mb', 100)
+        )
+        self.google_reader = GoogleWorkspaceReader(
+            credentials_path=config.get('google_credentials_path'),
+            api_timeout_seconds=config.get('api_timeout_seconds', 60),
+            max_retries=config.get('max_retries', 3)
+        )
+        
+        # ライターを初期化
+        self.powerpoint_writer = PowerPointWriter()
+        self.word_writer = WordWriter()
+        self.excel_writer = ExcelWriter()
+        self.google_writer = GoogleWorkspaceWriter(
+            credentials_path=config.get('google_credentials_path'),
+            api_timeout_seconds=config.get('api_timeout_seconds', 60),
+            max_retries=config.get('max_retries', 3)
+        )
+    
+    def handle_read_powerpoint(self, file_path: str) -> dict:
+        """Handle PowerPoint read requests"""
+        pass
+    
+    def handle_write_powerpoint(self, data: dict, output_path: str) -> dict:
+        """Handle PowerPoint write requests"""
+        pass
+    
+    # 他のハンドラーメソッド...
+    
+    def _success_response(self, data: dict) -> dict:
+        """Return success response in JSON format"""
+        return {"success": True, "data": data}
+    
+    def _error_response(self, error_type: str, message: str, details: dict = None) -> dict:
+        """Return error response in JSON format (not stringified)"""
+        return {
+            "success": False,
+            "error": {
+                "type": error_type,
+                "message": message,
+                "details": details or {}
+            }
+        }
+```
+
 ## データモデル
 
 ### 共通データ構造
@@ -400,6 +467,79 @@ class WriteResult:
     error: Optional[str]
 ```
 
+### データモデルの使用方針
+
+**設計決定**: 全てのリーダーとライターは共通データモデルを使用し、型安全性を確保します。
+
+- **ReadResult**: 全てのリーダーの`read_file`メソッドは`ReadResult`を返す
+- **WriteResult**: 全てのライターの`create_*`メソッドは`WriteResult`を返す
+- **DocumentContent**: 抽出されたコンテンツは`DocumentContent`でラップされる
+- **型安全性**: 生の辞書ではなく、データクラスを使用してランタイムエラーを防ぐ
+
+## 正確性プロパティ
+
+*プロパティとは、システムの全ての有効な実行において真であるべき特性や動作のことです。プロパティは、人間が読める仕様と機械で検証可能な正確性保証の橋渡しとして機能します。*
+
+### プロパティ1: ドキュメント読み取りの完全性
+*任意の*有効なドキュメントファイル（PowerPoint、Word、Excel）に対して、Document_Readerは必要な全ての構造要素（タイトル、コンテンツ、メタデータ）を抽出し、構造化された形式で返すべきである
+**検証対象: 要件 1.1, 1.2, 1.4, 2.1, 2.2, 3.1, 3.2**
+
+### プロパティ2: データ形式の一貫性
+*任意の*ドキュメント読み取り操作において、抽出されたデータは指定された構造化形式（JSON、CSV、マークダウン）のいずれかで提供されるべきである
+**検証対象: 要件 2.3, 3.3**
+
+### プロパティ3: エラーハンドリングの統一性
+*任意の*無効なファイル（破損、存在しない、アクセス不可）に対して、MCP_Serverは明確で一貫したエラーメッセージを返すべきである
+**検証対象: 要件 1.3, 2.4, 3.4, 4.5, 5.5, 6.5, 7.5, 8.5**
+
+### プロパティ4: 制限値の遵守
+*任意の*Excelファイルに対して、Document_Readerは最大100シートまでの制限を遵守し、制限を超える場合は適切に処理するべきである
+**検証対象: 要件 3.5**
+
+### プロパティ5: Google API統合の一貫性
+*任意の*有効なGoogle WorkspaceファイルID/URLに対して、Document_Readerは対応するGoogle APIを使用してデータを取得するべきである
+**検証対象: 要件 4.1, 4.2, 4.3**
+
+### プロパティ6: ドキュメント生成の完全性
+*任意の*有効な構造化データに対して、Document_Writerは対応する形式のドキュメントファイルを生成し、必要な要素（タイトル、コンテンツ、書式）を含むべきである
+**検証対象: 要件 5.1, 5.2, 5.4, 6.1, 6.2, 6.3, 7.1, 7.2, 7.3**
+
+### プロパティ7: ファイル保存の確実性
+*任意の*ドキュメント生成操作において、Document_Writerは生成したファイルをユーザーがアクセス可能な場所に保存し、そのパスまたはURLを返すべきである
+**検証対象: 要件 5.3, 6.4, 7.4, 8.4**
+
+### プロパティ8: Google Workspace作成の一貫性
+*任意の*有効な構造化データに対して、Document_Writerは対応するGoogle APIを使用して新しいファイルを作成し、アクセス可能なURLを返すべきである
+**検証対象: 要件 8.1, 8.2, 8.3, 8.4**
+
+### プロパティ9: MCPツール公開の完全性
+*任意の*MCP_Server起動時において、全ての必要なツール（12個の読み取り/書き込み機能）がKiroに公開されるべきである
+**検証対象: 要件 9.2**
+
+### プロパティ10: 通信プロトコルの準拠
+*任意の*ツール呼び出しに対して、MCP_Serverは標準入出力を介して明確な成功または失敗の応答を返すべきである
+**検証対象: 要件 9.3, 9.5**
+
+### プロパティ11: 初期化性能の保証
+*任意の*MCP_Server起動において、初期化は30秒以内に完了し、TypeErrorなしで正常に動作するべきである
+**検証対象: 要件 9.4, 11.3**
+
+### プロパティ12: 開発環境スクリプトの動作保証
+*任意の*開発環境において、サンプルファイル生成スクリプトは必要なテストファイル（PowerPoint、Word、Excel）を生成し、テストスクリプトは各リーダーの動作を検証するべきである
+**検証対象: 要件 10.2, 10.4**
+
+### プロパティ13: 設定値の適用
+*任意の*リーダー初期化において、設定値（max_sheets、max_file_size_mb、max_slides）が正しく適用され、制限の検証が実行されるべきである
+**検証対象: 要件 11.1, 11.2, 11.8**
+
+### プロパティ14: データモデルの一貫性
+*任意の*読み取り/書き込み操作において、共通データモデル（DocumentContent、ReadResult、WriteResult）が使用され、一貫した形式でデータが処理されるべきである
+**検証対象: 要件 11.5**
+
+### プロパティ15: API呼び出しの信頼性
+*任意の*Google API呼び出しにおいて、最大3回のリトライと60秒のタイムアウトが実装され、一時的な障害に対する耐性を提供するべきである
+**検証対象: 要件 11.7**
+
 ## エラーハンドリング
 
 ### エラータイプ
@@ -430,6 +570,8 @@ MCPツールは以下の形式でエラーを返す必要があります：
 
 ### エラーハンドリング戦略
 
+**設計決定**: 統一されたエラーハンドリングにより、一貫したユーザーエクスペリエンスを提供します。
+
 - すべての例外をキャッチし、適切なエラーメッセージを返す
 - ファイル操作前にファイルの存在と読み取り権限を確認
 - ファイルサイズ制限を検証（設定値に基づく）
@@ -437,7 +579,35 @@ MCPツールは以下の形式でエラーを返す必要があります：
 - Google API呼び出しはリトライロジックを実装（最大3回、指数バックオフ）
 - タイムアウト設定: ファイル読み取り30秒、API呼び出し60秒
 
+### 制限値の検証
+
+**設計決定**: 設定可能な制限値により、リソース使用量を制御し、システムの安定性を確保します。
+
+```python
+class DocumentReader:
+    """Base class for document readers with validation"""
+    
+    def validate_file_size(self, file_path: str) -> None:
+        """Validate file size against configured limits"""
+        file_size_mb = os.path.getsize(file_path) / (1024 * 1024)
+        if file_size_mb > self.max_file_size_mb:
+            raise ValidationError(f"ファイルサイズが制限を超えています: {file_size_mb:.1f}MB > {self.max_file_size_mb}MB")
+    
+    def validate_content_limits(self, content_count: int, limit: int, content_type: str) -> None:
+        """Validate content count against configured limits"""
+        if content_count > limit:
+            raise ValidationError(f"{content_type}数が制限を超えています: {content_count} > {limit}")
+```
+
 ## テスト戦略
+
+### 二重テストアプローチ
+
+本プロジェクトでは、包括的なテストカバレッジを確保するために、ユニットテストとプロパティベーステストの両方を実装します：
+
+- **ユニットテスト**: 特定の例、エッジケース、エラー条件を検証
+- **プロパティベーステスト**: 全ての入力に対する普遍的なプロパティを検証
+- 両方のテストは相補的であり、包括的なカバレッジに必要です
 
 ### ユニットテスト
 
@@ -451,6 +621,31 @@ MCPツールは以下の形式でエラーを返す必要があります：
 - `tests/writers/test_word_writer.py`
 - `tests/writers/test_excel_writer.py`
 - `tests/writers/test_google_writer.py`
+
+**ユニットテストのバランス:**
+- ユニットテストは特定の例とエッジケースに有用
+- プロパティベーステストが多くの入力をカバーするため、過度なユニットテストは避ける
+- ユニットテストの焦点：
+  - 正しい動作を示す特定の例
+  - コンポーネント間の統合ポイント
+  - エッジケースとエラー条件
+
+### プロパティベーステスト
+
+**設定:**
+- 各プロパティテストは最小100回の反復を実行（ランダム化のため）
+- 各プロパティテストは設計書のプロパティを参照する必要がある
+- タグ形式: **Feature: document-format-mcp-server, Property {番号}: {プロパティテキスト}**
+- 各正確性プロパティは単一のプロパティベーステストで実装される
+
+**プロパティベーステストライブラリ:**
+- **Python**: `hypothesis` パッケージを使用
+- 最小100回の反復で設定
+- 各テストは対応する設計書プロパティにタグ付け
+
+**プロパティテストの焦点:**
+- 全ての入力に対して成り立つ普遍的なプロパティ
+- ランダム化による包括的な入力カバレッジ
 
 ### 統合テスト
 
@@ -495,6 +690,7 @@ MCPツールは以下の形式でエラーを返す必要があります：
   "max_sheets": 100,
   "max_slides": 500,
   "api_timeout_seconds": 60,
+  "max_retries": 3,
   "enable_google_workspace": true
 }
 ```
@@ -505,6 +701,46 @@ MCPツールは以下の形式でエラーを返す必要があります：
 - `MCP_OUTPUT_DIR`: 出力ファイルディレクトリ
 - `MCP_LOG_LEVEL`: ログレベル（DEBUG、INFO、WARNING、ERROR）
 
+### 設定値の適用
+
+**設計決定**: 設定値は初期化時にリーダー/ライタークラスに渡され、実行時に制限が適用されます。
+
+```python
+class ConfigManager:
+    """Manage configuration loading and validation"""
+    
+    @staticmethod
+    def load_config(config_path: str = None) -> dict:
+        """Load configuration from file and environment variables"""
+        # デフォルト設定
+        default_config = {
+            "max_file_size_mb": 100,
+            "max_sheets": 100,
+            "max_slides": 500,
+            "api_timeout_seconds": 60,
+            "max_retries": 3
+        }
+        
+        # 設定ファイルから読み込み
+        if config_path and os.path.exists(config_path):
+            with open(config_path, 'r') as f:
+                file_config = json.load(f)
+            default_config.update(file_config)
+        
+        # 環境変数で上書き
+        env_overrides = {
+            "google_credentials_path": os.getenv("GOOGLE_APPLICATION_CREDENTIALS"),
+            "output_directory": os.getenv("MCP_OUTPUT_DIR"),
+            "log_level": os.getenv("MCP_LOG_LEVEL", "INFO")
+        }
+        
+        for key, value in env_overrides.items():
+            if value is not None:
+                default_config[key] = value
+        
+        return default_config
+```
+
 ## デプロイメント
 
 ### パッケージ構造
@@ -512,28 +748,42 @@ MCPツールは以下の形式でエラーを返す必要があります：
 ```
 document-format-mcp-server/
 ├── src/
-│   ├── __init__.py
-│   ├── server.py
-│   ├── readers/
-│   │   ├── __init__.py
-│   │   ├── powerpoint_reader.py
-│   │   ├── word_reader.py
-│   │   ├── excel_reader.py
-│   │   └── google_reader.py
-│   ├── writers/
-│   │   ├── __init__.py
-│   │   ├── powerpoint_writer.py
-│   │   ├── word_writer.py
-│   │   ├── excel_writer.py
-│   │   └── google_writer.py
-│   ├── tools/
-│   │   ├── __init__.py
-│   │   └── tool_definitions.py
-│   └── utils/
+│   └── document_format_mcp_server/
 │       ├── __init__.py
-│       ├── config.py
-│       └── errors.py
+│       ├── server.py
+│       ├── readers/
+│       │   ├── __init__.py
+│       │   ├── powerpoint_reader.py
+│       │   ├── word_reader.py
+│       │   ├── excel_reader.py
+│       │   └── google_reader.py
+│       ├── writers/
+│       │   ├── __init__.py
+│       │   ├── powerpoint_writer.py
+│       │   ├── word_writer.py
+│       │   ├── excel_writer.py
+│       │   └── google_writer.py
+│       ├── tools/
+│       │   ├── __init__.py
+│       │   ├── tool_definitions.py
+│       │   └── tool_handlers.py
+│       └── utils/
+│           ├── __init__.py
+│           ├── config.py
+│           ├── errors.py
+│           ├── models.py
+│           └── logging_config.py
 ├── tests/
+│   ├── readers/
+│   └── writers/
+├── scripts/
+│   ├── setup/
+│   │   └── create_sample_files.py
+│   └── demo/
+│       └── test_readers.py
+├── docs/
+│   ├── QUICKSTART.md
+│   └── SETUP.md
 ├── pyproject.toml
 ├── README.md
 └── config.json.example
@@ -847,3 +1097,63 @@ python test_readers.py
 - Pytestによるユニットテスト
 - カバレッジレポート
 - 自動デプロイメント
+
+## ログ出力とモニタリング
+
+### ログ設定
+
+**設計決定**: 構造化されたログ出力により、デバッグとモニタリングを支援します。
+
+```python
+class LoggingConfig:
+    """Configure logging for the MCP server"""
+    
+    @staticmethod
+    def setup_logging(log_level: str = "INFO") -> None:
+        """Setup logging configuration"""
+        logging.basicConfig(
+            level=getattr(logging, log_level.upper()),
+            format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+            handlers=[
+                logging.StreamHandler(),
+                logging.FileHandler('mcp_server.log')
+            ]
+        )
+```
+
+### ログ出力ポイント
+
+- **サーバ起動時**: 初期化完了とツール登録状況
+- **ツール呼び出し時**: ツール名、パラメータ、実行時間
+- **ファイル処理時**: 読み取り/書き込み開始、完了、エラー
+- **API呼び出し時**: Google API呼び出しの成功/失敗、リトライ状況
+- **エラー発生時**: 詳細なエラー情報とスタックトレース
+
+### テストスイート構成
+
+**設計決定**: 包括的なテストスイートにより、実装の正確性を保証します。
+
+```
+tests/
+├── readers/
+│   ├── test_powerpoint_reader.py
+│   ├── test_word_reader.py
+│   ├── test_excel_reader.py
+│   └── test_google_reader.py
+├── writers/
+│   ├── test_powerpoint_writer.py
+│   ├── test_word_writer.py
+│   ├── test_excel_writer.py
+│   └── test_google_writer.py
+├── tools/
+│   └── test_tool_handlers.py
+├── utils/
+│   ├── test_config.py
+│   └── test_models.py
+├── property_tests/
+│   ├── test_properties_1_5.py
+│   ├── test_properties_6_10.py
+│   └── test_properties_11_15.py
+└── integration/
+    └── test_mcp_server.py
+```
